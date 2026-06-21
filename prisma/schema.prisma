@@ -62,10 +62,24 @@ model Match {
   sportsbetId String?     @unique @map("sportsbet_id")
   tabId       String?     @unique @map("tab_id")
   bet365Id    String?     @unique @map("bet365_id")
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  odds        Odds[]
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  odds          Odds[]
+  snapshots     OddsSnapshot[]
 
   @@map("matches")
+}
+
+model Subscription {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String    @unique @map("user_id") @db.Uuid
+  stripeCustomerId     String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  status               String    @default("inactive")
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("subscriptions")
 }
 
 model Odds {
@@ -84,4 +98,49 @@ model Odds {
   @@index([matchId])
   @@index([updatedAt])
   @@map("odds")
+}
+
+model OddsSnapshot {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId    String     @map("match_id") @db.Uuid
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  bookmaker  Bookmaker
+  marketType MarketType @map("market_type")
+  outcome    Outcome
+  price      Decimal    @db.Decimal(6, 2)
+  lineValue  Decimal?   @map("line_value") @db.Decimal(5, 1)
+  recordedAt DateTime   @default(now()) @map("recorded_at") @db.Timestamptz
+
+  @@index([matchId, recordedAt])
+  @@index([recordedAt])
+  @@map("odds_snapshots")
+}
+
+model AlertPreferences {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String   @unique @map("user_id") @db.Uuid
+  email              String?
+  phone              String?
+  alertNewArb        Boolean  @default(true) @map("alert_new_arb")
+  minArbRoi          Decimal  @default(0.5) @map("min_arb_roi") @db.Decimal(5, 2)
+  alertSteamMove     Boolean  @default(true) @map("alert_steam_move")
+  steamMoveThreshold Decimal  @default(10) @map("steam_move_threshold") @db.Decimal(5, 2)
+  alertHighEv        Boolean  @default(false) @map("alert_high_ev")
+  minEvPercent       Decimal  @default(3) @map("min_ev_percent") @db.Decimal(5, 2)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("alert_preferences")
+}
+
+model AlertLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  alertType String   @map("alert_type")
+  key       String
+  sentAt    DateTime @default(now()) @map("sent_at") @db.Timestamptz
+
+  @@unique([userId, alertType, key])
+  @@index([userId, sentAt])
+  @@map("alert_log")
 }
