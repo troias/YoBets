@@ -3,251 +3,85 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-enum SubscriptionTier {
-  FREE
-  PRO
-  ENTERPRISE
+enum MatchStatus {
+  upcoming
+  live
+  completed
+
+  @@map("match_status")
 }
 
-enum MovementDirection {
-  UP
-  DOWN
-  FLAT
+enum Bookmaker {
+  sportsbet
+  tab
+  bet365
+  ladbrokes
+  neds
+  pointsbet
+  unibet
+  betright
+  betr
+  betfair
+  tabtouch
+  playup
+
+  @@map("bookmaker")
 }
 
-model User {
-  id                  String          @id @default(cuid())
-  email               String          @unique
-  displayName         String?
-  timezone            String          @default("Australia/Sydney")
-  isAdmin             Boolean         @default(false)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  subscriptions       Subscription[]
-  alerts              Alert[]
-  evOpportunities     EVOpportunity[]
-  arbitrageRecords    ArbitrageOpportunity[]
-  lineMovements       LineMovement[]
+enum MarketType {
+  h2h
+  line
+  total
 
-  @@index([email])
+  @@map("market_type")
 }
 
-model Subscription {
-  id                String            @id @default(cuid())
-  userId            String
-  tier              SubscriptionTier  @default(FREE)
-  status            String            @default("active")
-  stripeCustomerId  String?
-  stripePriceId     String?
-  currentPeriodEnd  DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+enum Outcome {
+  home
+  away
+  draw
+  over
+  under
 
-  @@index([userId, tier])
-  @@index([status])
+  @@map("outcome")
 }
 
-model Sportsbook {
-  id                String              @id @default(cuid())
-  key               String              @unique
-  name              String
-  countryCode       String              @default("AU")
-  isSharp           Boolean             @default(false)
-  isActive          Boolean             @default(true)
-  averageReactionMs Int?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  snapshots         OddsSnapshot[]
-  scraperStatus     ScraperStatus?
+model Match {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  homeTeam    String      @map("home_team")
+  awayTeam    String      @map("away_team")
+  kickoffAt   DateTime    @map("kickoff_at") @db.Timestamptz
+  round       Int
+  season      Int
+  status      MatchStatus @default(upcoming)
+  sportsbetId String?     @unique @map("sportsbet_id")
+  tabId       String?     @unique @map("tab_id")
+  bet365Id    String?     @unique @map("bet365_id")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  odds        Odds[]
 
-  @@index([countryCode, isActive])
+  @@map("matches")
 }
 
-model Sport {
-  id                String          @id @default(cuid())
-  key               String          @unique
-  name              String
-  priority          Int             @default(100)
-  leagues           League[]
-  events            Event[]
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+model Odds {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId     String     @map("match_id") @db.Uuid
+  bookmaker   Bookmaker
+  marketType  MarketType @map("market_type")
+  outcome     Outcome
+  price       Decimal    @db.Decimal(6, 2)
+  lineValue   Decimal?   @map("line_value") @db.Decimal(5, 1)
+  deepLinkUrl String     @map("deep_link_url")
+  updatedAt   DateTime   @map("updated_at") @db.Timestamptz
+  match       Match      @relation(fields: [matchId], references: [id])
 
-  @@index([priority])
-}
-
-model League {
-  id                String          @id @default(cuid())
-  sportId           String
-  key               String          @unique
-  name              String
-  countryCode       String          @default("AU")
-  events            Event[]
-  sport             Sport           @relation(fields: [sportId], references: [id], onDelete: Cascade)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([sportId, countryCode])
-}
-
-model Event {
-  id                String          @id @default(cuid())
-  sportId           String
-  leagueId          String
-  externalId        String?
-  name              String
-  homeTeam          String
-  awayTeam          String
-  startsAt          DateTime
-  status            String          @default("scheduled")
-  markets           Market[]
-  snapshots         OddsSnapshot[]
-  sport             Sport           @relation(fields: [sportId], references: [id], onDelete: Cascade)
-  league            League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([leagueId, startsAt])
-  @@index([sportId, status])
-}
-
-model Market {
-  id                String           @id @default(cuid())
-  eventId           String
-  key               String
-  name              String
-  normalizedName    String
-  line              Decimal?
-  selections        Selection[]
-  snapshots         OddsSnapshot[]
-  lineMovements     LineMovement[]
-  event             Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-
-  @@unique([eventId, key, normalizedName, line])
-  @@index([eventId, normalizedName])
-}
-
-model Selection {
-  id                String           @id @default(cuid())
-  marketId          String
-  key               String
-  name              String
-  participant       String?
-  snapshots         OddsSnapshot[]
-  market            Market           @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-
-  @@index([marketId, key])
-}
-
-model OddsSnapshot {
-  id                String           @id @default(cuid())
-  sportsbookId      String
-  eventId           String
-  marketId          String
-  selectionId       String
-  oddsDecimal       Decimal
-  impliedProbability Decimal
-  sourceCapturedAt  DateTime
-  createdAt         DateTime         @default(now())
-  sportsbook        Sportsbook       @relation(fields: [sportsbookId], references: [id], onDelete: Cascade)
-  event             Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  market            Market           @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  selection         Selection        @relation(fields: [selectionId], references: [id], onDelete: Cascade)
-
-  @@index([eventId, marketId, sourceCapturedAt])
-  @@index([sportsbookId, sourceCapturedAt])
-}
-
-model ArbitrageOpportunity {
-  id                String           @id @default(cuid())
-  userId            String?
-  eventId           String
-  marketId          String
-  roiPercent        Decimal
-  guaranteedReturn  Decimal
-  totalStake        Decimal
-  stakePlanJson     Json
-  sportsbooksJson   Json
-  foundAt           DateTime         @default(now())
-  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([eventId, marketId, foundAt])
-  @@index([roiPercent])
-}
-
-model EVOpportunity {
-  id                String           @id @default(cuid())
-  userId            String?
-  eventId           String
-  marketId          String
-  selectionId       String
-  sportsbookId      String
-  oddsDecimal       Decimal
-  fairOddsDecimal   Decimal
-  impliedProbability Decimal
-  expectedValuePct  Decimal
-  valueScore        Int              @default(0)
-  foundAt           DateTime         @default(now())
-  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([eventId, marketId, expectedValuePct])
-  @@index([sportsbookId, valueScore])
-}
-
-model Alert {
-  id                String           @id @default(cuid())
-  userId            String
-  type              String
-  channel           String           @default("in_app")
-  threshold         Decimal?
-  marketKey         String?
-  teamOrSelection   String?
-  isEnabled         Boolean          @default(true)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, type, isEnabled])
-}
-
-model ScraperStatus {
-  id                String           @id @default(cuid())
-  sportsbookId      String           @unique
-  status            String           @default("healthy")
-  lastSuccessAt     DateTime?
-  lastFailureAt     DateTime?
-  failuresInRow     Int              @default(0)
-  avgRuntimeMs      Int?
-  updatedAt         DateTime         @updatedAt
-  sportsbook        Sportsbook       @relation(fields: [sportsbookId], references: [id], onDelete: Cascade)
-
-  @@index([status, failuresInRow])
-}
-
-model LineMovement {
-  id                String            @id @default(cuid())
-  userId            String?
-  eventId           String
-  marketId          String
-  selectionId       String
-  fromOdds          Decimal
-  toOdds            Decimal
-  direction         MovementDirection
-  velocityScore     Decimal
-  sourceTime        DateTime
-  createdAt         DateTime          @default(now())
-  market            Market            @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([eventId, marketId, sourceTime])
-  @@index([direction, velocityScore])
+  @@unique([matchId, bookmaker, marketType, outcome])
+  @@index([matchId])
+  @@index([updatedAt])
+  @@map("odds")
 }

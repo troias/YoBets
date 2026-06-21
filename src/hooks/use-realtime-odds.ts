@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 
 export function useRealtimeOdds(eventId: string, onUpdate: (payload: unknown) => void) {
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
+    const supabase = createClient();
 
     const channel = supabase
       .channel(`odds:${eventId}`)
