@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
 type AppConfigRow = Awaited<ReturnType<typeof prisma.appConfig.findMany>>[number];
+type ApiKeyRow = Awaited<ReturnType<typeof prisma.apiKey.findMany>>[number];
 import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
@@ -52,7 +53,7 @@ export default async function AdminPage() {
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
   const configMap = new Map<string, AppConfigRow>(appConfigs.map((c: AppConfigRow) => [c.key, c]));
-  const customConfigs = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key));
+  const customConfigs: AppConfigRow[] = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key));
 
   const statCards = [
     { label: "Active",        value: active },
@@ -176,7 +177,7 @@ export default async function AdminPage() {
             <p className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Custom</p>
             {customConfigs.length > 0 && (
               <div className="mb-3 space-y-2">
-                {customConfigs.map((c) => {
+                {customConfigs.map((c: AppConfigRow) => {
                   const deleteAction = deleteAppConfig.bind(null, c.id);
                   return (
                     <div key={c.id} className="flex items-center gap-3">
@@ -231,7 +232,7 @@ export default async function AdminPage() {
             <p className="text-xs text-zinc-600">No keys yet.</p>
           ) : (
             <div className="space-y-2">
-              {apiKeys.map((k) => {
+              {apiKeys.map((k: ApiKeyRow) => {
                 const deleteAction = deleteApiKey.bind(null, k.id);
                 return (
                   <div key={k.id} className="flex items-start justify-between gap-3 rounded-lg bg-zinc-900 p-3">
