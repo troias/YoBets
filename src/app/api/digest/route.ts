@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendEmail, sendSms, sendPush } from "@/lib/alerts";
 
+type OddsRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { odds: true } }>>>[number]["odds"][number];
+
 // Called by a cron job (Railway cron or Vercel cron) once per minute.
 // Only sends to users whose digestTime matches the current hour:minute (AEST).
 // Secure with CRON_SECRET so only the cron caller can trigger it.
@@ -42,13 +44,13 @@ export async function POST(req: NextRequest) {
   const candidates: EVCandidate[] = [];
 
   for (const match of upcomingMatches) {
-    const h2h = match.odds.filter(o => o.marketType === "h2h");
-    const bookmakers = [...new Set(h2h.map(o => o.bookmaker))];
+    const h2h = match.odds.filter((o: OddsRow) => o.marketType === "h2h");
+    const bookmakers = [...new Set(h2h.map((o: OddsRow) => o.bookmaker))];
 
     for (const bk of bookmakers) {
-      const bkOdds = h2h.filter(o => o.bookmaker === bk);
-      const homeOdds = bkOdds.find(o => o.outcome === "home");
-      const awayOdds = bkOdds.find(o => o.outcome === "away");
+      const bkOdds = h2h.filter((o: OddsRow) => o.bookmaker === bk);
+      const homeOdds = bkOdds.find((o: OddsRow) => o.outcome === "home");
+      const awayOdds = bkOdds.find((o: OddsRow) => o.outcome === "away");
       if (!homeOdds || !awayOdds) continue;
 
       const homeP = 1 / Number(homeOdds.price);

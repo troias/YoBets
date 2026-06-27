@@ -5,6 +5,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 
+type OddsRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { odds: true } }>>>[number]["odds"][number];
+
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet",
   tab:       "TAB",
@@ -210,11 +212,11 @@ export default async function NRLPage({
               const teamForOutcome: Record<string, string> = {
                 home: match.homeTeam, away: match.awayTeam, over: "Over", under: "Under",
               };
-              const bookmakers = [...new Set(match.odds.map(o => o.bookmaker))];
+              const bookmakers = [...new Set(match.odds.map((o: OddsRow) => o.bookmaker))];
               const bestByOutcome: Record<string, number> = {};
               for (const outcome of outcomes) {
-                const rows = match.odds.filter(o => o.outcome === outcome);
-                bestByOutcome[outcome] = rows.length ? Math.max(...rows.map(o => Number(o.price))) : 0;
+                const rows = match.odds.filter((o: OddsRow) => o.outcome === outcome);
+                bestByOutcome[outcome] = rows.length ? Math.max(...rows.map((o: OddsRow) => Number(o.price))) : 0;
               }
               const kickoff = match.kickoffAt.toLocaleString("en-AU", {
                 timeZone: "Australia/Sydney", weekday: "short", day: "numeric",
@@ -243,7 +245,7 @@ export default async function NRLPage({
                       </thead>
                       <tbody>
                         {outcomes.map(outcome => {
-                          const rows = match.odds.filter(o => o.outcome === outcome);
+                          const rows = match.odds.filter((o: OddsRow) => o.outcome === outcome);
                           const repLineValue = rows[0]?.lineValue !== undefined ? Number(rows[0].lineValue) : null;
                           const label = outcomeLabel(market, outcome, teamForOutcome[outcome], repLineValue);
                           const best = bestByOutcome[outcome];
@@ -251,7 +253,7 @@ export default async function NRLPage({
                             <tr key={outcome} className="border-b border-zinc-800/40 last:border-0">
                               <td className="px-4 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{label}</td>
                               {bookmakers.map(bm => {
-                                const odd = rows.find(o => o.bookmaker === bm);
+                                const odd = rows.find((o: OddsRow) => o.bookmaker === bm);
                                 const price = odd ? Number(odd.price) : null;
                                 const lineValue = odd?.lineValue !== undefined ? Number(odd.lineValue) : null;
                                 const isBest = price !== null && price === best;
