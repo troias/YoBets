@@ -6,6 +6,24 @@ import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
 
+const SERVICES = [
+  { group: "The Odds API", entries: [{ label: "The Odds API Key", key: "THE_ODDS_API_KEY" }] },
+  { group: "Resend",       entries: [{ label: "Resend API Key",   key: "RESEND_API_KEY" }] },
+  { group: "Twilio",       entries: [
+    { label: "Account SID",  key: "TWILIO_ACCOUNT_SID" },
+    { label: "Auth Token",   key: "TWILIO_AUTH_TOKEN" },
+    { label: "Phone Number", key: "TWILIO_PHONE_NUMBER" },
+  ]},
+  { group: "Stripe", entries: [
+    { label: "Secret Key",       key: "STRIPE_SECRET_KEY" },
+    { label: "Publishable Key",  key: "STRIPE_PUBLISHABLE_KEY" },
+    { label: "Webhook Secret",   key: "STRIPE_WEBHOOK_SECRET" },
+    { label: "Monthly Price ID", key: "STRIPE_PRICE_MONTHLY" },
+  ]},
+] as const;
+
+const KNOWN_KEYS = new Set(SERVICES.flatMap((s) => s.entries.map((e) => e.key)));
+
 export default async function AdminPage() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
@@ -31,11 +49,13 @@ export default async function AdminPage() {
   const mrr = priceMonthly > 0 ? active * priceMonthly : null;
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
+  const configMap = new Map(appConfigs.map((c) => [c.key, c]));
+  const customConfigs = appConfigs.filter((c) => !KNOWN_KEYS.has(c.key as never));
 
   const statCards = [
-    { label: "Active", value: active },
-    { label: "Trialing", value: trialing },
-    { label: "Total subs", value: active + trialing },
+    { label: "Active",        value: active },
+    { label: "Trialing",      value: trialing },
+    { label: "Total subs",    value: active + trialing },
     { label: "Churned (30d)", value: churned },
   ];
 
@@ -96,120 +116,95 @@ export default async function AdminPage() {
           </div>
         </div>
 
-        {/* App Config / External API Keys */}
-        {(() => {
-          const configMap = new Map(appConfigs.map((c) => [c.key, c]));
+        {/* App Config */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-6">
+          <h2 className="text-sm font-medium text-zinc-300">App Config</h2>
 
-          const SERVICES = [
-            { group: "The Odds API",  entries: [{ label: "The Odds API Key", key: "THE_ODDS_API_KEY" }] },
-            { group: "Resend",        entries: [{ label: "Resend API Key",    key: "RESEND_API_KEY" }] },
-            { group: "Twilio",        entries: [
-              { label: "Account SID",  key: "TWILIO_ACCOUNT_SID" },
-              { label: "Auth Token",   key: "TWILIO_AUTH_TOKEN" },
-              { label: "Phone Number", key: "TWILIO_PHONE_NUMBER" },
-            ]},
-            { group: "Stripe",        entries: [
-              { label: "Secret Key",      key: "STRIPE_SECRET_KEY" },
-              { label: "Publishable Key", key: "STRIPE_PUBLISHABLE_KEY" },
-              { label: "Webhook Secret",  key: "STRIPE_WEBHOOK_SECRET" },
-              { label: "Monthly Price ID", key: "STRIPE_PRICE_MONTHLY" },
-            ]},
-          ];
-
-          const knownKeys = new Set(SERVICES.flatMap((s) => s.entries.map((e) => e.key)));
-          const customConfigs = appConfigs.filter((c) => !knownKeys.has(c.key));
-
-          return (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-6">
-              <h2 className="text-sm font-medium text-zinc-300">App Config</h2>
-
-              {SERVICES.map(({ group, entries }) => (
-                <div key={group}>
-                  <p className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">{group}</p>
-                  <div className="space-y-2">
-                    {entries.map(({ label, key }) => {
-                      const existing = configMap.get(key);
-                      const envValue = process.env[key] ?? null;
-                      const deleteAction = existing ? deleteAppConfig.bind(null, existing.id) : null;
-                      const displayValue = existing?.value ?? envValue;
-                      const source = existing ? "db" : envValue ? "env" : null;
-                      return (
-                        <div key={key} className="flex items-center gap-3">
-                          <div className="w-36 shrink-0">
-                            <p className="text-sm text-zinc-300">{label}</p>
-                            <p className="font-mono text-[10px] text-zinc-600">{key}</p>
-                          </div>
-                          {displayValue ? (
-                            <div className="flex flex-1 items-center gap-2">
-                              <ConfigValue value={displayValue} />
-                              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                source === "db" ? "bg-green-900/50 text-green-400" : "bg-zinc-800 text-zinc-500"
-                              }`}>
-                                {source}
-                              </span>
-                              {existing && (
-                                <form action={deleteAction!}>
-                                  <button type="submit" className="text-xs text-red-400 hover:text-red-300 transition">Remove</button>
-                                </form>
-                              )}
-                            </div>
-                          ) : (
-                            <form action={upsertAppConfig} className="flex flex-1 gap-2">
-                              <input type="hidden" name="label" value={label} />
-                              <input type="hidden" name="key" value={key} />
-                              <input name="value" placeholder="Paste value…" required
-                                className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
-                              <button type="submit"
-                                className="shrink-0 rounded-lg bg-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-600">
-                                Save
-                              </button>
+          {SERVICES.map(({ group, entries }) => (
+            <div key={group}>
+              <p className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">{group}</p>
+              <div className="space-y-2">
+                {entries.map(({ label, key }) => {
+                  const existing = configMap.get(key);
+                  const envValue = process.env[key] ?? null;
+                  const displayValue = existing?.value ?? envValue;
+                  const source = existing ? "db" : envValue ? "env" : null;
+                  const deleteAction = existing ? deleteAppConfig.bind(null, existing.id) : null;
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="w-36 shrink-0">
+                        <p className="text-sm text-zinc-300">{label}</p>
+                        <p className="font-mono text-[10px] text-zinc-600">{key}</p>
+                      </div>
+                      {displayValue ? (
+                        <div className="flex flex-1 items-center gap-2">
+                          <ConfigValue value={displayValue} />
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            source === "db" ? "bg-green-900/50 text-green-400" : "bg-zinc-800 text-zinc-500"
+                          }`}>
+                            {source}
+                          </span>
+                          {existing && deleteAction && (
+                            <form action={deleteAction}>
+                              <button type="submit" className="text-xs text-red-400 hover:text-red-300 transition">Remove</button>
                             </form>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              {/* Custom / extra entries */}
-              <div>
-                <p className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Custom</p>
-                {customConfigs.length > 0 && (
-                  <div className="mb-3 space-y-2">
-                    {customConfigs.map((c) => {
-                      const deleteAction = deleteAppConfig.bind(null, c.id);
-                      return (
-                        <div key={c.id} className="flex items-center gap-3">
-                          <div className="w-36 shrink-0">
-                            <p className="text-sm text-zinc-300">{c.label}</p>
-                            <p className="font-mono text-[10px] text-zinc-600">{c.key}</p>
-                          </div>
-                          <ConfigValue value={c.value} />
-                          <form action={deleteAction}>
-                            <button type="submit" className="text-xs text-red-400 hover:text-red-300 transition">Remove</button>
-                          </form>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <form action={upsertAppConfig} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
-                  <input name="label" placeholder="Label" required
-                    className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
-                  <input name="key" placeholder="KEY_NAME" required
-                    className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
-                  <input name="value" placeholder="Value" required
-                    className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
-                  <button type="submit"
-                    className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-600">
-                    Save
-                  </button>
-                </form>
+                      ) : (
+                        <form action={upsertAppConfig} className="flex flex-1 gap-2">
+                          <input type="hidden" name="label" value={label} />
+                          <input type="hidden" name="key" value={key} />
+                          <input name="value" placeholder="Paste value…" required
+                            className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
+                          <button type="submit"
+                            className="shrink-0 rounded-lg bg-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-600">
+                            Save
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          );
-        })()}
+          ))}
+
+          {/* Custom entries */}
+          <div>
+            <p className="mb-2 text-xs font-medium text-zinc-500 uppercase tracking-wide">Custom</p>
+            {customConfigs.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {customConfigs.map((c) => {
+                  const deleteAction = deleteAppConfig.bind(null, c.id);
+                  return (
+                    <div key={c.id} className="flex items-center gap-3">
+                      <div className="w-36 shrink-0">
+                        <p className="text-sm text-zinc-300">{c.label}</p>
+                        <p className="font-mono text-[10px] text-zinc-600">{c.key}</p>
+                      </div>
+                      <ConfigValue value={c.value} />
+                      <form action={deleteAction}>
+                        <button type="submit" className="text-xs text-red-400 hover:text-red-300 transition">Remove</button>
+                      </form>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <form action={upsertAppConfig} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+              <input name="label" placeholder="Label" required
+                className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
+              <input name="key" placeholder="KEY_NAME" required
+                className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
+              <input name="value" placeholder="Value" required
+                className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
+              <button type="submit"
+                className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-600">
+                Save
+              </button>
+            </form>
+          </div>
+        </div>
 
         {/* API Keys */}
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-4">
@@ -222,16 +217,10 @@ export default async function AdminPage() {
           </div>
 
           <form action={createApiKey} className="flex gap-2">
-            <input
-              name="name"
-              placeholder="Key name (e.g. Digital Income OS)"
-              required
-              className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600"
-            />
-            <button
-              type="submit"
-              className="shrink-0 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-500"
-            >
+            <input name="name" placeholder="Key name (e.g. Digital Income OS)" required
+              className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
+            <button type="submit"
+              className="shrink-0 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-500">
               Generate
             </button>
           </form>
@@ -253,10 +242,8 @@ export default async function AdminPage() {
                       </p>
                     </div>
                     <form action={deleteAction}>
-                      <button
-                        type="submit"
-                        className="shrink-0 rounded px-2 py-1 text-xs text-red-400 transition hover:bg-zinc-800"
-                      >
+                      <button type="submit"
+                        className="shrink-0 rounded px-2 py-1 text-xs text-red-400 transition hover:bg-zinc-800">
                         Revoke
                       </button>
                     </form>
