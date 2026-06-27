@@ -4,8 +4,8 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { PaywallGate } from "@/components/paywall-gate";
 
-type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
-type SnapRow = { bookmaker: string; outcome: string | null; recordedAt: Date; price: unknown };
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
+type SnapRow = { bookmaker: string; outcome: string | null; recordedAt: Date; price: number | string };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",
@@ -70,20 +70,22 @@ export default async function LivePage() {
           ) : (
             <div className="space-y-3">
               {matches.map((match) => {
-                const bookmakers = [...new Set(match.odds.map((o: OddsRow) => o.bookmaker))];
+                const matchOdds = match.odds as unknown as OddsRow[];
+                const matchSnaps = match.snapshots as unknown as SnapRow[];
+                const bookmakers = [...new Set(matchOdds.map(o => o.bookmaker))];
                 const outcomes = ["home", "away"] as const;
                 const bestByOutcome: Record<string, number> = {};
                 for (const oc of outcomes) {
-                  const rows = match.odds.filter((o: OddsRow) => o.outcome === oc);
-                  bestByOutcome[oc] = rows.length ? Math.max(...rows.map((o: OddsRow) => Number(o.price))) : 0;
+                  const rows = matchOdds.filter(o => o.outcome === oc);
+                  bestByOutcome[oc] = rows.length ? Math.max(...rows.map(o => Number(o.price))) : 0;
                 }
 
                 // Detect recent moves from snapshots for this match
                 const movesByKey = new Map<string, { from: number; to: number; pct: number }>();
                 for (const oc of outcomes) {
                   for (const bm of bookmakers) {
-                    const snaps = match.snapshots
-                      .filter((s: SnapRow) => s.outcome === oc && s.bookmaker === bm)
+                    const snaps = matchSnaps
+                      .filter(s => s.outcome === oc && s.bookmaker === bm)
                       .sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
                     if (snaps.length < 2) continue;
                     const from = Number(snaps[0].price);
@@ -133,14 +135,14 @@ export default async function LivePage() {
                           </thead>
                           <tbody>
                             {outcomes.map(oc => {
-                              const rows = match.odds.filter((o: OddsRow) => o.outcome === oc);
+                              const rows = matchOdds.filter(o => o.outcome === oc);
                               const label = oc === "home" ? match.homeTeam.split(" ").slice(-1)[0] : match.awayTeam.split(" ").slice(-1)[0];
                               const best = bestByOutcome[oc];
                               return (
                                 <tr key={oc} className="border-b border-zinc-800/40 last:border-0">
                                   <td className="px-4 py-2.5 text-xs text-zinc-400">{label}</td>
                                   {bookmakers.map(bm => {
-                                    const odd = rows.find((o: OddsRow) => o.bookmaker === bm);
+                                    const odd = rows.find(o => o.bookmaker === bm);
                                     const price = odd ? Number(odd.price) : null;
                                     const isBest = price !== null && price === best;
                                     const move = movesByKey.get(`${bm}|${oc}`);

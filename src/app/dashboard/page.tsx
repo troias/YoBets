@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PaywallGate } from "@/components/paywall-gate";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 
-type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",
@@ -44,8 +44,9 @@ export default async function DashboardPage() {
   // Find arbs across all upcoming matches
   const arbs: Array<{ matchName: string; roi: number; bookmakers: string }> = [];
   for (const match of upcomingMatches) {
-    const homeOdds = match.odds.filter((o: OddsRow) => o.outcome === "home");
-    const awayOdds = match.odds.filter((o: OddsRow) => o.outcome === "away");
+    const odds = match.odds as unknown as OddsRow[];
+    const homeOdds = odds.filter(o => o.outcome === "home");
+    const awayOdds = odds.filter(o => o.outcome === "away");
     if (!homeOdds.length || !awayOdds.length) continue;
     const bestHome = homeOdds.reduce((b, o) => Number(o.price) > Number(b.price) ? o : b);
     const bestAway = awayOdds.reduce((b, o) => Number(o.price) > Number(b.price) ? o : b);
@@ -66,12 +67,13 @@ export default async function DashboardPage() {
   // Find top EV bets
   const evBets: Array<{ matchName: string; bookmaker: string; outcome: string; ev: number; odds: number }> = [];
   for (const match of upcomingMatches) {
-    const homeOdds = match.odds.filter((o: OddsRow) => o.outcome === "home");
-    const awayOdds = match.odds.filter((o: OddsRow) => o.outcome === "away");
+    const odds2 = match.odds as unknown as OddsRow[];
+    const homeOdds = odds2.filter(o => o.outcome === "home");
+    const awayOdds = odds2.filter(o => o.outcome === "away");
     if (homeOdds.length < 2 || awayOdds.length < 2) continue;
 
-    const aByBook = new Map(homeOdds.map((o: OddsRow) => [o.bookmaker, Number(o.price)]));
-    const bByBook = new Map(awayOdds.map((o: OddsRow) => [o.bookmaker, Number(o.price)]));
+    const aByBook = new Map(homeOdds.map(o => [o.bookmaker, Number(o.price)]));
+    const bByBook = new Map(awayOdds.map(o => [o.bookmaker, Number(o.price)]));
     const shared = [...aByBook.keys()].filter(bm => bByBook.has(bm));
     if (shared.length < 2) continue;
 
@@ -256,10 +258,11 @@ export default async function DashboardPage() {
                     </div>
                   </div>
                   {nextMatch.odds.length > 0 && (() => {
-                    const homeOdds = nextMatch.odds.filter((o: OddsRow) => o.outcome === "home");
-                    const awayOdds = nextMatch.odds.filter((o: OddsRow) => o.outcome === "away");
-                    const bestHome = homeOdds.length ? Math.max(...homeOdds.map((o: OddsRow) => Number(o.price))) : null;
-                    const bestAway = awayOdds.length ? Math.max(...awayOdds.map((o: OddsRow) => Number(o.price))) : null;
+                    const matchOdds = nextMatch.odds as unknown as OddsRow[];
+                    const homeOdds = matchOdds.filter(o => o.outcome === "home");
+                    const awayOdds = matchOdds.filter(o => o.outcome === "away");
+                    const bestHome = homeOdds.length ? Math.max(...homeOdds.map(o => Number(o.price))) : null;
+                    const bestAway = awayOdds.length ? Math.max(...awayOdds.map(o => Number(o.price))) : null;
                     return (
                       <div className="flex gap-3">
                         <div className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-center">

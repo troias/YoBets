@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendEmail, sendSms, sendPush } from "@/lib/alerts";
 
-type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
 
 // Called by a cron job (Railway cron or Vercel cron) once per minute.
 // Only sends to users whose digestTime matches the current hour:minute (AEST).
@@ -44,13 +44,14 @@ export async function POST(req: NextRequest) {
   const candidates: EVCandidate[] = [];
 
   for (const match of upcomingMatches) {
-    const h2h = match.odds.filter((o: OddsRow) => o.marketType === "h2h");
-    const bookmakers = [...new Set(h2h.map((o: OddsRow) => o.bookmaker))];
+    const odds = match.odds as unknown as OddsRow[];
+    const h2h = odds.filter(o => o.marketType === "h2h");
+    const bookmakers = [...new Set(h2h.map(o => o.bookmaker))];
 
     for (const bk of bookmakers) {
-      const bkOdds = h2h.filter((o: OddsRow) => o.bookmaker === bk);
-      const homeOdds = bkOdds.find((o: OddsRow) => o.outcome === "home");
-      const awayOdds = bkOdds.find((o: OddsRow) => o.outcome === "away");
+      const bkOdds = h2h.filter(o => o.bookmaker === bk);
+      const homeOdds = bkOdds.find(o => o.outcome === "home");
+      const awayOdds = bkOdds.find(o => o.outcome === "away");
       if (!homeOdds || !awayOdds) continue;
 
       const homeP = 1 / Number(homeOdds.price);
