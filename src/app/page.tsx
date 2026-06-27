@@ -26,11 +26,11 @@ const FAQS = [
   },
   {
     q: "Which bookmakers are covered?",
-    a: "Sportsbet, TAB, Ladbrokes, Neds, PointsBet, Unibet, BetRight, Betr, Betfair, TABtouch, PlayUp, and Bet365. More bookmakers and markets being added.",
+    a: "Sportsbet, TAB, Ladbrokes, Neds, PointsBet, Unibet, BetRight, Betr, Betfair, TABtouch, PlayUp, and Bet365 — all licensed Australian bookmakers. EdgeBoard is built for the Australian market, where these books operate. AFL and other sports coming soon.",
   },
   {
     q: "How often does the data update?",
-    a: "Every 2 minutes. Arb windows can close in minutes — the update frequency is designed around that constraint.",
+    a: "It adapts to how close kickoff is — every 60 min for matches more than 3 days out, 15 min within 72 hours, 5 min within 24 hours, and every 2 min once a match is within 3 hours. Pro users get push, email, or SMS the moment something worth acting on changes.",
   },
   {
     q: "Can I cancel anytime?",
@@ -77,10 +77,10 @@ export default async function HomePage() {
     <div className="min-h-screen bg-black text-zinc-100">
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-zinc-800/60 bg-black/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
           <span className="text-lg font-semibold tracking-tight">EdgeBoard</span>
-          <div className="flex items-center gap-6">
-            <Link href="/pricing" className="text-sm text-zinc-400 hover:text-zinc-100 transition">
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Link href="/pricing" className="text-sm text-zinc-400 hover:text-zinc-100 transition hidden sm:block">
               Pricing
             </Link>
             {user ? (
@@ -88,50 +88,61 @@ export default async function HomePage() {
                 href="/nrl"
                 className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-zinc-200"
               >
-                Open Dashboard
+                Open app
               </Link>
             ) : (
               <>
-                <Link href="/login" className="text-sm text-zinc-400 hover:text-zinc-100 transition">
+                <Link href="/login" className="text-sm text-zinc-400 hover:text-zinc-100 transition hidden sm:block">
                   Sign in
                 </Link>
                 <Link
                   href="/register"
-                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-zinc-200"
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-zinc-200 whitespace-nowrap"
                 >
-                  Start Free Trial
+                  Start free
                 </Link>
               </>
             )}
           </div>
         </div>
+        {/* Mobile sub-nav for pricing/sign in */}
+        {!user && (
+          <div className="flex items-center justify-center gap-6 border-t border-zinc-800/40 px-4 py-2 sm:hidden">
+            <Link href="/pricing" className="text-xs text-zinc-500 hover:text-zinc-300 transition">
+              Pricing
+            </Link>
+            <Link href="/login" className="text-xs text-zinc-500 hover:text-zinc-300 transition">
+              Sign in
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* Hero */}
-      <section className="mx-auto max-w-4xl px-6 pb-20 pt-24 text-center">
+      <section className="mx-auto max-w-4xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-20 sm:pt-24">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-4 py-1.5 text-xs text-zinc-400">
           <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-          Live NRL odds · Updated every 2 minutes
+          Built for Australian bettors · NRL · 12 bookmakers
         </div>
-        <h1 className="text-5xl font-bold leading-tight tracking-tight sm:text-6xl">
+        <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
           Stop leaving money at
           <br />
           <span className="text-green-400">the wrong bookmaker.</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-400">
+        <p className="mx-auto mt-5 max-w-2xl text-base text-zinc-400 sm:mt-6 sm:text-lg">
           EdgeBoard compares live NRL odds across 12 Australian bookmakers, surfaces arbitrage
           opportunities, and flags positive EV bets — so you always get the best price.
         </p>
-        <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+        <div className="mt-8 flex flex-col items-center gap-3 sm:mt-10 sm:flex-row sm:justify-center">
           <Link
             href={user ? "/nrl" : "/register"}
-            className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-black transition hover:bg-zinc-200"
+            className="w-full rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-black transition hover:bg-zinc-200 sm:w-auto"
           >
-            {user ? "Open Dashboard" : "Start for free — no card needed"}
+            {user ? "Open app" : "Start for free — no card needed"}
           </Link>
           <Link
             href="/pricing"
-            className="rounded-xl border border-zinc-700 px-8 py-3.5 text-base text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100"
+            className="w-full rounded-xl border border-zinc-700 px-8 py-3.5 text-base text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100 sm:w-auto"
           >
             See what Pro adds →
           </Link>
@@ -146,7 +157,7 @@ export default async function HomePage() {
             { value: "12", label: "Australian bookmakers" },
             { value: matchCount.toString(), label: "upcoming NRL matches" },
             { value: oddsCount.toLocaleString(), label: "odds tracked" },
-            { value: "2 min", label: "refresh interval" },
+            { value: "2 min", label: "polls near kickoff" },
           ].map(({ value, label }) => (
             <div key={label} className="text-center">
               <div className="text-2xl font-bold text-zinc-100">{value}</div>
@@ -292,7 +303,7 @@ export default async function HomePage() {
         <div className="grid gap-8 md:grid-cols-3">
           {[
             { step: "1", title: "Create your account", desc: "Sign up with Google or email. No credit card needed to start your trial." },
-            { step: "2", title: "Browse live odds", desc: "Every upcoming NRL match. Every bookmaker. Updated every 2 minutes." },
+            { step: "2", title: "Browse live odds", desc: "Every upcoming NRL match. Every bookmaker. Odds refresh every 2 min once kickoff is within 3 hours." },
             { step: "3", title: "Bet at the best price", desc: "Click any highlighted price to go directly to the bookmaker. Done." },
           ].map(({ step, title, desc }) => (
             <div key={step} className="flex flex-col items-center text-center">
@@ -311,7 +322,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-4xl px-6 py-20">
           <h2 className="mb-2 text-center text-2xl font-semibold">Start free. Upgrade when you&apos;re ready.</h2>
           <p className="mb-12 text-center text-sm text-zinc-500">
-            The full product is free. Pro adds instant alerts when arbs open.
+            The full product is free. Pro adds push, email, and SMS alerts for price targets, EV bets, steam moves, and arbs.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
 
@@ -361,10 +372,11 @@ export default async function HomePage() {
               <ul className="mt-6 flex-1 space-y-2.5">
                 {[
                   "Everything in Free",
-                  "Polls every 2 min when a match is <3h away",
-                  "Browser push alerts the instant an arb opens",
-                  "Email alerts for arbs and steam moves",
-                  "SMS alerts (configure in settings)",
+                  "Price alerts — set a target price; notified by push, email, or SMS when it hits",
+                  "EV alerts — notified the moment a +EV bet appears",
+                  "Steam move alerts — notified when sharp money shifts a line",
+                  "Closing Line Value (CLV) tracker — measure your long-run edge",
+                  "Bet ROI dashboard — log bets, track P&L and ROI",
                 ].map(f => (
                   <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
                     <span className="mt-0.5 shrink-0 text-amber-500">✓</span>{f}

@@ -1,210 +1,204 @@
-# EdgeBoard — MVP Product Requirements Document
+# EdgeBoard — Product Requirements Document
 
-**Version:** 1.0  
-**Target Launch:** 30 days from kickoff  
-**Status:** Draft  
+**Version:** 2.0 (live product — updated from original pre-build spec)
+**Status:** Launched — iterating
+**Last updated:** 2026-06-27
+**Owner:** Troy Flavell (solo)
 
 ---
 
 ## 1. Overview
 
-EdgeBoard is a real-time odds comparison platform for Australian sports bettors. The MVP delivers a single-sport, three-bookmaker odds board that surfaces the best available price, arbitrage opportunities, and positive expected value (EV) bets across NRL markets.
+EdgeBoard is a free-first odds comparison and alerts platform for Australian NRL bettors. It compares live odds across 11+ bookmakers, surfaces arbitrage opportunities and positive EV bets, tracks line movement, and — for Pro subscribers — sends push, email, and SMS notifications when a price target, EV bet, steam move, or arb appears.
+
+**Business model:** Free tier (full research access, no card needed) + Pro subscription ($19 AUD/month or $99 AUD/year, 7-day free trial). Revenue from Pro subscriptions and bookmaker affiliate commissions.
 
 ---
 
 ## 2. Target Market
 
-**Primary user:** Australian sports bettor who actively shops odds across Sportsbet, TAB, and Bet365.  
-**Profile:** Places 5–20 NRL bets per week, already has accounts at multiple bookmakers, and understands basic concepts like line shopping and odds value.
+**Primary user:** Australian NRL bettor who actively shops odds across multiple bookmakers and wants an edge — either through better prices, value bets, or guaranteed profit via arbs.
+
+**Profile:**
+- Places 5–20 NRL bets per week
+- Already holds accounts at multiple bookmakers
+- Understands line shopping; may or may not understand EV or arbs
+- Checks odds on mobile more often than desktop
+- Values being notified when action is needed, not having to constantly check manually
 
 ---
 
-## 3. MVP Scope
+## 3. Pricing Strategy
 
-| Dimension | In Scope | Out of Scope |
+| Tier | Price | Access |
 |---|---|---|
-| Sport | NRL only | AFL, A-League, Rugby Union, cricket, etc. |
-| Bookmakers | Sportsbet, TAB, Bet365 | Pointsbet, Neds, BlueBet, etc. |
-| Markets | Head-to-head (H2H), line (AH), totals (O/U) | Player props, first scorer, exotics |
-| Features | Live odds board, best odds, arb finder, EV finder | AI predictions, CLV tracking, steam moves, user portfolios, historical analytics |
+| Free | $0 — no card required | Full read access to all research tools |
+| Pro (monthly) | $19 AUD/month | Everything Free + all alert types + CLV + ROI dashboard |
+| Pro (annual) | $99 AUD/year (~$8.25/month) | Same as Pro monthly — saves ~57% |
+
+**7-day free trial** on first Pro subscription. Cancel anytime from settings.
+
+**Conversion hook:** Free users get full product visibility — they see arbs, EV bets, and line moves. The gap is that they have to manually check. Pro removes that friction entirely and adds tools for tracking their own performance.
 
 ---
 
-## 4. Non-Goals
+## 4. Current Feature Set (Live as of 2026-06-27)
 
-The following are explicitly excluded from the MVP and should not influence architecture or delivery scope:
+### 4.1 NRL Odds Board (`/nrl`)
+- 11 Australian bookmakers side by side (Sportsbet, TAB, Ladbrokes, Neds, PointsBet, Unibet, BetRight, Betr, Betfair, TABtouch, PlayUp, Bet365)
+- H2H markets for all upcoming NRL matches (7-day window)
+- Best price per outcome visually highlighted
+- Affiliate deep links — clicking a price opens the bookmaker at the correct market
+- Price alert bell on each outcome — logged-in users can set a target price
+- Adaptive polling: 60 min (>72h), 15 min (>24h), 5 min (>3h), 2 min (<3h to kickoff)
 
-- AI-generated match predictions
-- Closing Line Value (CLV) tracking
-- Steam move detection
-- User bet portfolios or bet tracking
-- Historical odds analytics
-- Sports beyond NRL
+### 4.2 Arb Finder (`/arbitrage`)
+- Detects two-way arbitrage across all bookmaker combinations
+- Shows ROI%, exact stake split for any outlay, deep links for each leg
+- FOMO panel: shows odds snapshot count since last visit for non-Pro users
+- Twitter/X share button on each arb card
 
----
+### 4.3 EV Finder (`/ev`)
+- No-vig fair probability derived from best available market price (Pinnacle method)
+- EV% = (fair_probability × offered_odds) − 1
+- Kelly criterion stake calculator
+- EV threshold filter: 0% / 1% / 2% / 5%
+- Twitter/X share button on each EV row
+- Upgrade nudge banner for non-Pro users
 
-## 5. Features
+### 4.4 Line Movement Tracker (`/line-movement`)
+- 1h, 6h, 24h, 48h comparison windows
+- Steam move detection: flags rapid multi-book movement
+- Upgrade nudge for non-Pro users
 
----
+### 4.5 Market Brief (`/brief`)
+- Daily digest of the best plays: top arbs, top EV bets, notable line moves
 
-### 5.1 Live Odds Board
+### 4.6 Live Markets (`/live`)
+- Shows matches kicking off within 2 hours
 
-**Description:** A real-time table showing current odds for every live and upcoming NRL match across all three bookmakers.
+### 4.7 Price Alerts (Pro)
+- Users set a target price on any outcome directly from the NRL odds board
+- Worker checks on every poll cycle; when price >= target, sends push + email + SMS
+- Active alerts visible and removable in Settings
+- Stored in `price_alerts` table; `fired_at` marks completion
 
-**User Story**  
-As an NRL bettor, I want to see live odds from Sportsbet, TAB, and Bet365 side-by-side in a single view so that I can quickly compare prices without switching between three apps.
+### 4.8 Push / Email / SMS Notifications (Pro)
+- **Push:** Web Push API (VAPID); browser permission required; toggle in settings
+- **Email:** Resend API
+- **SMS:** Twilio (E.164 number required; configured in settings)
+- Alert types: price target hit, +EV bet appears, steam move detected, arb opens
 
-**Acceptance Criteria**
-- [ ] Board displays all NRL matches with kick-off within the next 7 days
-- [ ] Each row shows match name, kick-off time, and odds columns for Sportsbet, TAB, and Bet365
-- [ ] Markets supported: H2H (Home / Draw / Away), line, totals
-- [ ] Odds update within 30 seconds of a change at the source bookmaker
-- [ ] Stale odds (>2 min without refresh) are visually flagged (greyed out or timestamped)
-- [ ] Board is sorted by kick-off time ascending by default
-- [ ] Works on mobile (375px viewport) and desktop
-- [ ] Page loads to interactive state in under 3 seconds on a 4G connection
+### 4.9 Dashboard (`/dashboard`)
+- Overview: live count of arbs, EV bets, line moves, upcoming matches
+- Quick links to all features
 
-**Required Data**
-- Match schedule: teams, kick-off datetime, round, season
-- Live odds per market per bookmaker, with last-updated timestamp
-- Bookmaker logo / name for column headers
+### 4.10 Bet Tracker (`/bets`)
+- Log placed bets: match, outcome, odds, stake, result
+- Foundation for CLV tracking and ROI dashboard (Pro — in development)
 
-**Success Metric**
-- 70% of active sessions include at least one odds board view
-- Median odds staleness < 60 seconds during live match windows
+### 4.11 Free Bet Converter (`/free-bet-converter`)
+- Calculates optimal hedge to convert a free bet to guaranteed cash
 
----
+### 4.12 Settings (`/settings`)
+- Active price alerts list with remove button
+- Notification preferences: push toggle, email, phone number for SMS
+- Alert thresholds: min EV%, min arb ROI%, steam move sensitivity
+- Subscription status + Stripe billing portal link
 
-### 5.2 Best Available Odds
-
-**Description:** For each market on the odds board, highlight the single best price available across all three bookmakers so the user can instantly identify where to bet.
-
-**User Story**  
-As an NRL bettor, I want the best available price for each outcome highlighted automatically so that I never accidentally take a worse price than the market offers.
-
-**Acceptance Criteria**
-- [ ] The highest odds for each outcome (home, away, draw, line side, total side) are visually highlighted (e.g., bold, green background, or badge)
-- [ ] If two bookmakers offer the same best price, both are highlighted
-- [ ] Highlighting updates in real-time alongside odds refreshes
-- [ ] A "Best Odds" summary card per match shows: outcome label, best price, bookmaker name
-- [ ] Clicking / tapping the highlighted cell deep-links to the relevant bookmaker page (affiliate link or direct URL)
-- [ ] Best odds are recalculated server-side, not client-side, to prevent stale UI state
-
-**Required Data**
-- All data from 5.1
-- Deep-link URL template per bookmaker per market type
-
-**Success Metric**
-- Bookmaker deep-link click-through rate ≥ 15% of sessions that view a highlighted cell
-- Zero reported incidents of incorrect best-odds highlighting in the first 14 days post-launch
-
----
-
-### 5.3 Arbitrage Opportunity Finder
-
-**Description:** Automatically detect and surface combinations of odds across the three bookmakers where a guaranteed profit can be locked in regardless of match result.
-
-**User Story**  
-As an NRL bettor, I want to be alerted when an arbitrage opportunity exists across these bookmakers so that I can place bets that guarantee a return without relying on match outcome.
-
-**Acceptance Criteria**
-- [ ] System calculates implied probability sum for each market across all bookmaker combinations
-- [ ] Any combination where the implied probability sum < 100% is flagged as an arbitrage opportunity
-- [ ] Arb opportunities are displayed in a dedicated "Arbs" section, separate from the main odds board
-- [ ] Each arb card shows: match, market, the required bookmaker and odds for each leg, minimum profit percentage (e.g., +1.4%), and a suggested stake split for a $100 total outlay
-- [ ] Cards are sorted by profit percentage descending
-- [ ] A new arb opportunity triggers an in-app notification (toast) if the user is on the platform
-- [ ] Opportunities that close (implied prob returns above 100%) are removed within 60 seconds
-- [ ] Arb % and stake split recalculate on each odds refresh
-
-**Required Data**
-- All data from 5.1
-- Bookmaker-specific minimum bet limits (to flag opportunities below the minimum viable stake — display only, no enforcement)
-
-**Success Metric**
-- At least 1 arb opportunity surfaced per NRL match day during the first 4 weeks
-- Arb card-to-click conversion ≥ 20% (user taps a bookmaker link from an arb card)
+### 4.13 Admin (`/admin`)
+- Affiliate URL manager: set tracking URL per bookmaker
+- Click tracker: counts per bookmaker (drives affiliate strategy)
+- Stripe health check: green/red per env var
+- Worker mode: production / slow / off
+- Discord webhook URL for ops alerts
 
 ---
 
-### 5.4 Positive EV Opportunity Finder
+## 5. Pro Tier — Full Feature List
 
-**Description:** Identify bets where the implied probability derived from the sharpest available market (no-vig fair odds) suggests the offered price from one bookmaker represents positive expected value.
-
-**User Story**  
-As an NRL bettor, I want to see which individual bets across the board have positive expected value so that I can make bets that are profitable in the long run, even when no arb exists.
-
-**Acceptance Criteria**
-- [ ] Fair (no-vig) probability for each outcome is derived from the sharpest available line using the Pinnacle method or equivalent (remove bookmaker margin from best available market price)
-- [ ] EV % is calculated as: `EV% = (fair_probability × decimal_odds) - 1`
-- [ ] Any outcome with EV% > 0% is flagged as a positive EV bet
-- [ ] Positive EV bets appear in a dedicated "EV Bets" section
-- [ ] Each EV card shows: match, market, outcome, bookmaker, offered odds, fair odds, EV%, and a plain-English label (e.g., "Sydney Roosters H2H at Sportsbet — +3.2% EV")
-- [ ] Cards are sorted by EV% descending
-- [ ] EV threshold is configurable in a simple filter (e.g., "Show only EV > 2%") with a default of > 0%
-- [ ] EV cards update within 60 seconds of an odds change that affects the calculation
-- [ ] A tooltip or info icon explains EV in plain language for less experienced users
-
-**Required Data**
-- All data from 5.1
-- No-vig fair probability model (derived from live odds, no external model required at MVP)
-
-**Success Metric**
-- EV section has a ≥ 10% click-through rate to bookmaker links
-- User sessions that visit the EV section stay on-site at least 2x longer than sessions that do not (engagement proxy for perceived value)
-
----
-
-## 6. Technical Constraints
-
-| Constraint | Detail |
+| Feature | Status |
 |---|---|
-| Odds freshness | Target ≤ 30-second update cycle for in-play matches; ≤ 2-minute cycle for pre-match |
-| Bookmaker data | Data must be obtained via official API partnerships or public-facing scraping where permitted under bookmaker ToS |
-| Geo-restriction | Platform must be accessible only from Australian IP addresses (legal requirement) |
-| Responsible gambling | Each page must display a responsible gambling notice and link to GambleAware |
-| HTTPS | All connections TLS 1.2+ |
+| Price alerts (push/email/SMS when target hits) | ✅ Live |
+| EV alerts (notified when +EV bet appears) | ✅ Live |
+| Steam move alerts | ✅ Live |
+| Arb alerts | ✅ Live |
+| Closing Line Value (CLV) tracker | 🔵 In development |
+| Bet ROI dashboard (P&L, units, long-run ROI%) | 🔵 In development |
+| Alert deduplication (fire once per event, not repeatedly) | 🔵 In development |
 
 ---
 
-## 7. Out-of-Scope Deferral Table
+## 6. Technical Architecture
 
-| Feature | Reason Deferred | Earliest Revisit |
+| Layer | Technology |
+|---|---|
+| Web app | Next.js 15 (App Router), React, Tailwind CSS |
+| Database | Supabase (PostgreSQL) + Prisma ORM |
+| Auth | Supabase Auth (Google OAuth + email/password) |
+| Background worker | BullMQ + Redis (Upstash), deployed on Railway (Sydney) |
+| Payments | Stripe Checkout + Customer Portal + Webhooks |
+| Push notifications | Web Push API (VAPID keys) |
+| Email | Resend API |
+| SMS | Twilio |
+| Deployment | Vercel (web) + Railway (worker) |
+
+**Polling schedule (worker — adaptive by proximity to kickoff):**
+- Match > 72h away: poll every 60 min
+- Match 24–72h away: poll every 15 min
+- Match 3–24h away: poll every 5 min
+- Match < 3h away: poll every 2 min
+- No upcoming matches: poll every 6h
+
+---
+
+## 7. Bookmakers Covered
+
+Sportsbet · TAB · Ladbrokes · Neds · PointsBet · Unibet · BetRight · Betr · Betfair · TABtouch · PlayUp · Bet365
+
+Source: The Odds API (11 bookmakers) + Bet365 Playwright scraper (requires Railway Sydney IP).
+
+---
+
+## 8. Deferred / Out of Scope
+
+| Feature | Status |
+|---|---|
+| AFL / A-League / other sports | Post-launch |
+| AI match predictions | Not planned |
+| In-play 30-second polling | Post-launch (once pre-match stable) |
+| iOS / Android native app | Post-PMF |
+| API access tier | Post-launch |
+| Referral / affiliate program for users | Post-launch |
+| Pinnacle as reference line | Post-launch |
+
+---
+
+## 9. Remaining Pre-Launch Tasks
+
+| Task | Priority | Notes |
 |---|---|---|
-| AI match predictions | Requires training data and model infrastructure beyond 30-day window | Post-MVP v1 |
-| CLV tracking | Needs user accounts and bet-logging infrastructure | Post-MVP v1 |
-| Steam move detection | Requires historical odds velocity data not available at launch | v2 |
-| User portfolios | Account system not in MVP scope | Post-MVP v1 |
-| Historical analytics | No data warehouse at MVP | v2 |
-| Additional sports | Focused NRL launch reduces integration complexity | Post-MVP v1 |
+| CLV tracker (Pro) | High | Requires logging closing odds per match; compare to user's placed bet price |
+| Bet ROI dashboard (Pro) | High | Extend `/bets` with P&L calc and ROI% |
+| Alert deduplication | High | Prevent same alert firing multiple times for one event |
+| Geo-restriction (AU only) | Medium | Vercel middleware `X-Vercel-IP-Country !== AU` → 403 |
+| Terms of Service | Medium | Required before accepting payments at scale |
+| Privacy Policy | Medium | Required under Australian Privacy Act |
+| Sentry error monitoring | Medium | Needs Railway + Vercel env var |
+| Plausible analytics | Low | Add `<Script>` tag + custom events |
+| Stripe webhook registration | Manual | Register `yourdomain.com/api/webhooks/stripe` in Stripe dashboard |
+| Affiliate program signups | Manual | Sportsbet, Ladbrokes, Unibet, Betfair — paste tracking URLs in Admin |
+| Discord server setup | Manual | Create server, #free-alerts channel, paste webhook URL in Admin |
 
 ---
 
-## 8. Success Criteria (MVP Exit)
-
-The MVP is considered successful and ready for v1 development when the following are met after 14 days of live operation:
+## 10. Success Metrics
 
 | Metric | Target |
 |---|---|
-| Odds board uptime | ≥ 99% during NRL match windows |
-| Median odds staleness | < 60 seconds |
-| Arb opportunities per match day | ≥ 1 |
-| Bookmaker link CTR from best odds | ≥ 15% |
-| EV section engagement (session length 2x) | Confirmed in analytics |
-| User-reported data accuracy issues | 0 critical bugs in 14 days |
-
----
-
-## 9. Launch Checklist (30-Day Timeline)
-
-| Week | Milestone |
-|---|---|
-| Week 1 | Bookmaker odds ingestion live for all three; match schedule seeded |
-| Week 2 | Live odds board rendering on web; best odds highlighting working |
-| Week 3 | Arb finder logic complete and validated; EV finder complete |
-| Week 4 | Geo-restriction, responsible gambling notices, QA pass, soft launch |
-
----
-
-*Document owner: Troy Flavell — EdgeBoard*  
-*Last updated: 2026-06-20*
+| Free → Pro conversion rate | ≥ 5% of registered users within 30 days |
+| Pro trial → paid conversion | ≥ 40% |
+| Monthly Pro churn | ≤ 10% |
+| Bookmaker affiliate CTR from best odds | ≥ 15% of sessions |
+| Push notification opt-in rate | ≥ 30% of Pro subscribers |
+| Odds board uptime during NRL match windows | ≥ 99% |

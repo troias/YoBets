@@ -17,7 +17,9 @@ export default function RegisterPage() {
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?redirectTo=/nrl`,
+      },
     });
   }
 
@@ -55,7 +57,7 @@ export default function RegisterPage() {
 
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
-        <p className="text-sm text-zinc-400">7-day free trial, then $29 AUD/month</p>
+        <p className="text-sm text-zinc-400">Free to start — Pro from $19 AUD/month</p>
       </div>
 
       <Button

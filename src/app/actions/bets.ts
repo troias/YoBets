@@ -34,8 +34,10 @@ export async function settleBet(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  const id     = formData.get("id") as string;
-  const result = formData.get("result") as string;
+  const id           = formData.get("id") as string;
+  const result       = formData.get("result") as string;
+  const closingRaw   = formData.get("closingOdds") as string | null;
+  const closingOdds  = closingRaw && parseFloat(closingRaw) > 1 ? parseFloat(closingRaw) : null;
 
   const bet = await prisma.betLog.findUnique({ where: { id } });
   if (!bet || bet.userId !== user.id) return;
@@ -47,7 +49,7 @@ export async function settleBet(formData: FormData) {
 
   await prisma.betLog.update({
     where: { id },
-    data: { result, profit, settledAt: new Date() },
+    data: { result, profit, settledAt: new Date(), ...(closingOdds !== null && { closingOdds }) },
   });
 
   revalidatePath("/bets");

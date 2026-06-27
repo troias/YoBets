@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
+import { userAgent } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
@@ -36,6 +38,10 @@ export default async function LineMovementPage({
   searchParams: Promise<{ market?: string; window?: string; minMove?: string }>;
 }) {
   const params = await searchParams;
+  const headersList = await headers();
+  const { device } = userAgent({ headers: headersList });
+  const isMobile = device.type === "mobile" || device.type === "tablet";
+
   const market = (["h2h", "line", "total"].includes(params.market ?? "") ? params.market : "h2h") as MarketType;
   const windowKey = WINDOW_OPTIONS.includes(params.window ?? "") ? (params.window ?? "6h") : "6h";
   const windowHours = WINDOW_HOURS[windowKey];
@@ -207,10 +213,36 @@ export default async function LineMovementPage({
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-8 text-center text-sm text-zinc-500">
               No moves ≥{minMove}% in the last {windowKey}. Data builds up as the worker polls each cycle.
             </div>
+          ) : isMobile ? (
+            <div className="space-y-2">
+              {movements.map(m => {
+                const shortened = m.changePct < 0;
+                const kickoff = m.kickoffAt.toLocaleString("en-AU", { timeZone: "Australia/Sydney", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+                return (
+                  <div key={`${m.matchId}-${m.bookmaker}-${m.outcome}`} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
+                    <div className="border-b border-zinc-800 px-4 py-3">
+                      <div className="text-sm font-medium text-zinc-200">{m.matchName}</div>
+                      <div className="mt-0.5 text-xs text-zinc-500">{kickoff} AEST · {BOOKMAKER_LABEL[m.bookmaker] ?? m.bookmaker}</div>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-3 gap-3">
+                      <div className="text-sm capitalize text-zinc-300">{m.outcome}</div>
+                      <div className="flex items-center gap-3 text-sm tabular-nums">
+                        <span className="text-zinc-500">{m.openPrice.toFixed(2)}</span>
+                        <span className="text-zinc-700">→</span>
+                        <span className="font-semibold text-zinc-100">{m.closePrice.toFixed(2)}</span>
+                        <span className={`font-bold ${shortened ? "text-red-400" : "text-green-400"}`}>
+                          {shortened ? "▼" : "▲"}{Math.abs(m.changePct).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
               <div className="overflow-x-auto">
-              <table className="w-full min-w-120 text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800">
                     <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Match</th>
@@ -260,10 +292,36 @@ export default async function LineMovementPage({
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-8 text-center text-sm text-zinc-500">
               CLV data builds up as matches complete. Check back after a round.
             </div>
+          ) : isMobile ? (
+            <div className="space-y-2">
+              {clvRows.slice(0, 20).map(m => {
+                const shortened = m.changePct < 0;
+                const date = m.kickoffAt.toLocaleDateString("en-AU", { timeZone: "Australia/Sydney", weekday: "short", day: "numeric", month: "short" });
+                return (
+                  <div key={`clv-${m.matchId}-${m.bookmaker}-${m.outcome}`} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
+                    <div className="border-b border-zinc-800 px-4 py-3">
+                      <div className="text-sm font-medium text-zinc-200">{m.matchName}</div>
+                      <div className="mt-0.5 text-xs text-zinc-500">{date} · {BOOKMAKER_LABEL[m.bookmaker] ?? m.bookmaker}</div>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-3 gap-3">
+                      <div className="text-sm capitalize text-zinc-300">{m.outcome}</div>
+                      <div className="flex items-center gap-3 text-sm tabular-nums">
+                        <span className="text-zinc-500">{m.openPrice.toFixed(2)}</span>
+                        <span className="text-zinc-700">→</span>
+                        <span className="font-semibold text-zinc-100">{m.closePrice.toFixed(2)}</span>
+                        <span className={`font-bold ${shortened ? "text-red-400" : "text-green-400"}`}>
+                          {shortened ? "▼" : "▲"}{Math.abs(m.changePct).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
               <div className="overflow-x-auto">
-              <table className="w-full min-w-120 text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800">
                     <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Match</th>

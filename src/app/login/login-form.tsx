@@ -21,9 +21,12 @@ export default function LoginPage() {
   }
 
   async function signInWithGoogle() {
+    const dest = redirectTarget();
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(dest)}`,
+      },
     });
   }
 

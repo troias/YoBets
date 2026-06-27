@@ -6,6 +6,7 @@ import type { NrlOddsRow } from "@/workers/scrapers/adapters/the-odds-api";
 import {
   sendEmail, sendSms, sendPush,
   arbAlertHtml, arbAlertSms, steamAlertHtml, steamAlertSms,
+  evAlertHtml, evAlertSms,
 } from "@/lib/alerts";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 
@@ -194,7 +195,16 @@ async function pruneOldSnapshots(): Promise<void> {
   await prisma.oddsSnapshot.deleteMany({ where: { recordedAt: { lt: cutoff } } });
 }
 
+async function pruneOldAlertLogs(): Promise<void> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60_000);
+  await prisma.alertLog.deleteMany({ where: { sentAt: { lt: cutoff } } });
+}
+
 // ─── Alerts ──────────────────────────────────────────────────────────────────
+
+// Per-type dedup windows: arbs persist so use a long window; steam/EV/hot reset quicker
+const DEDUP_WINDOWS_MS = { arb: 4 * 60 * 60_000, steam: 60 * 60_000, ev: 60 * 60_000, hot: 60 * 60_000 } as const;
+type AlertType = keyof typeof DEDUP_WINDOWS_MS;
 
 async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, number>): Promise<void> {
   const prefs = (await prisma.alertPreferences.findMany({
@@ -221,16 +231,24 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
     pushSubsByUser.get(sub.userId)!.push(sub);
   }
 
+  const maxWindow = Math.max(...Object.values(DEDUP_WINDOWS_MS));
+
   for (const pref of prefs) {
     const to = pref.email ?? "";
     const toPhone = pref.phone ?? "";
     const pushSubs = pushSubsByUser.get(pref.userId) ?? [];
     if (!to && !toPhone && !pushSubs.length) continue;
 
-    const alreadySent = new Set(
-      ((await prisma.alertLog.findMany({ where: { userId: pref.userId, sentAt: { gte: new Date(Date.now() - 60 * 60_000) } } })) as unknown as AlertLogRow[])
-        .map(l => `${l.alertType}|${l.key}`)
-    );
+    // Load logs across the longest window so we can apply per-type checks below
+    const recentLogs = (await prisma.alertLog.findMany({
+      where: { userId: pref.userId, sentAt: { gte: new Date(Date.now() - maxWindow) } },
+    })) as unknown as AlertLogRow[];
+    const sentAtMap = new Map(recentLogs.map(l => [`${l.alertType}|${l.key}`, l.sentAt.getTime()]));
+
+    const wasSentRecently = (type: AlertType, key: string) => {
+      const sentAt = sentAtMap.get(`${type}|${key}`);
+      return sentAt !== undefined && sentAt > Date.now() - DEDUP_WINDOWS_MS[type];
+    };
 
     const logAlert = (type: string, key: string) =>
       prisma.alertLog.upsert({
@@ -239,6 +257,7 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
         update: { sentAt: new Date() },
       });
 
+    // ── Steam move alerts ────────────────────────────────────────────────────
     if (pref.alertSteamMove) {
       const threshold = Number(pref.steamMoveThreshold);
       for (const [matchId, matchRows] of byMatch) {
@@ -253,7 +272,7 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
           const changePct = ((row.price - prior) / prior) * 100;
           if (Math.abs(changePct) < threshold) continue;
           const alertKey = `${priorKey}|${row.price}`;
-          if (alreadySent.has(`steam|${alertKey}`)) continue;
+          if (wasSentRecently("steam", alertKey)) continue;
           const html = steamAlertHtml(matchName, row.bookmaker, outcome, prior, row.price, changePct);
           const sms  = steamAlertSms(matchName, row.bookmaker, outcome, prior, row.price);
           if (to) await sendEmail(to, `Steam move: ${row.bookmaker} ${matchName}`, html).catch(() => {});
@@ -264,6 +283,7 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
       }
     }
 
+    // ── Hot bet alerts ───────────────────────────────────────────────────────
     if (pref.alertHotBets) {
       const threshold = Number(pref.hotBetsThreshold);
       for (const [matchId, matchRows] of byMatch) {
@@ -280,7 +300,7 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
         for (const [outcomeKey, count] of movers) {
           if (count < 2) continue;
           const alertKey = `${matchId}|${outcomeKey}`;
-          if (alreadySent.has(`hot|${alertKey}`)) continue;
+          if (wasSentRecently("hot", alertKey)) continue;
           const [, outcome, dir] = outcomeKey.split("|");
           const msg = `Hot bet: ${matchName} — ${outcome} ${dir === "short" ? "shortening" : "drifting"} on ${count} books`;
           if (to) await sendEmail(to, `Hot Bet: ${matchName}`, `<p>${msg}</p>`).catch(() => {});
@@ -291,6 +311,7 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
       }
     }
 
+    // ── Arb alerts (4h dedup — arb key is bookmaker pair, not ROI%) ──────────
     if (pref.alertNewArb) {
       const minRoi = Number(pref.minArbRoi);
       for (const [matchId, matchRows] of byMatch) {
@@ -305,8 +326,9 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
           { sportsbook: bestAway.bookmaker, selection: "away", odds: bestAway.price },
         ]);
         if (!result || result.roiPercent < minRoi) continue;
-        const alertKey = `${matchId}-h2h-${bestHome.bookmaker}-${bestAway.bookmaker}-${result.roiPercent.toFixed(2)}`;
-        if (alreadySent.has(`arb|${alertKey}`)) continue;
+        // Key on bookmaker pair only — ROI fluctuates slightly on the same arb, no need to re-alert
+        const alertKey = `${matchId}|h2h|${bestHome.bookmaker}|${bestAway.bookmaker}`;
+        if (wasSentRecently("arb", alertKey)) continue;
         const legs = [
           { bookmaker: bestHome.bookmaker, outcome: bestHome.homeTeam, odds: bestHome.price, stake: result.legs[0].stake },
           { bookmaker: bestAway.bookmaker, outcome: bestAway.awayTeam, odds: bestAway.price, stake: result.legs[1].stake },
@@ -317,6 +339,42 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
         if (toPhone) await sendSms(toPhone, sms).catch(() => {});
         if (pushSubs.length) await sendPush(pushSubs, `Arb: +${result.roiPercent.toFixed(2)}%`, `${matchName} — guaranteed profit`, "/arbitrage").catch(() => {});
         await logAlert("arb", alertKey);
+      }
+    }
+
+    // ── EV alerts ────────────────────────────────────────────────────────────
+    if (pref.alertHighEv) {
+      const minEv = Number(pref.minEvPercent);
+      for (const [matchId, matchRows] of byMatch) {
+        const matchName = `${matchRows[0].homeTeam} vs ${matchRows[0].awayTeam}`;
+        const h2h = matchRows.filter(r => r.marketType === "h2h");
+
+        // No-vig fair probability: best available price per outcome
+        const bestByOutcome = new Map<string, number>();
+        for (const r of h2h) {
+          if (r.price > (bestByOutcome.get(r.outcome) ?? 0)) bestByOutcome.set(r.outcome, r.price);
+        }
+        const bestH = bestByOutcome.get("home");
+        const bestA = bestByOutcome.get("away");
+        if (!bestH || !bestA) continue;
+        const total = 1 / bestH + 1 / bestA;
+        const fairHome = (1 / bestH) / total;
+        const fairAway = (1 / bestA) / total;
+
+        for (const row of h2h) {
+          const fairProb = row.outcome === "home" ? fairHome : row.outcome === "away" ? fairAway : null;
+          if (fairProb === null) continue;
+          const evPct = (fairProb * row.price - 1) * 100;
+          if (evPct < minEv) continue;
+          const alertKey = `${matchId}|${row.bookmaker}|${row.outcome}|${row.price.toFixed(2)}`;
+          if (wasSentRecently("ev", alertKey)) continue;
+          const html = evAlertHtml(matchName, row.bookmaker, row.outcome, row.price, evPct);
+          const sms  = evAlertSms(matchName, row.bookmaker, row.outcome, evPct);
+          if (to) await sendEmail(to, `+EV bet: ${row.bookmaker} ${matchName}`, html).catch(() => {});
+          if (toPhone) await sendSms(toPhone, sms).catch(() => {});
+          if (pushSubs.length) await sendPush(pushSubs, `+${evPct.toFixed(1)}% EV`, sms, "/ev").catch(() => {});
+          await logAlert("ev", alertKey);
+        }
       }
     }
   }
@@ -554,6 +612,7 @@ export async function runPollCycle(): Promise<{ oddsCount: number; matchCount: n
     matchCount = uniqueEvents.length;
     void saveSnapshots(rows).catch(e => console.warn("[Poll] Snapshot save failed:", e.message));
     void pruneOldSnapshots().catch(() => {});
+    void pruneOldAlertLogs().catch(() => {});
     void checkAndSendAlerts(rows, priorPrices).catch(e => console.warn("[Poll] Alert check failed:", e.message));
     void checkMatchAlerts(rows, priorPrices).catch(e => console.warn("[Poll] Match alert check failed:", e.message));
     void checkPriceAlerts(rows).catch(e => console.warn("[Poll] Price alert check failed:", e.message));

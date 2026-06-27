@@ -18,10 +18,12 @@ const FREE_FEATURES = [
 
 const PRO_FEATURES = [
   "Everything in Free",
-  "Polls every 2 min when a match is <3 hours away",
-  "Browser push alerts the instant an arb opens",
-  "Email alerts for arbs and steam moves",
-  "SMS alerts (configure in settings)",
+  "Price alerts — set a target price on any outcome; notified by push, email, or SMS when it hits",
+  "EV alerts — notified the moment a +EV bet appears",
+  "Steam move alerts — notified when sharp money shifts a line",
+  "Arb alerts — notified the instant a profit window opens",
+  "Closing Line Value (CLV) tracker — measure your edge against the closing price",
+  "Bet ROI dashboard — log bets, track P&L and long-run ROI",
   "7-day free trial — cancel anytime",
 ];
 
@@ -65,7 +67,7 @@ export default async function PricingPage() {
           Find an edge. Keep your winnings.
         </h1>
         <p className="mt-2 text-zinc-400 max-w-md mx-auto">
-          EdgeBoard compares NRL odds across 11 Australian bookmakers in real time — finding arbs, value bets, and line moves before you place a bet.
+          Compare NRL odds across 11 bookmakers, find +EV bets, and get alerted the moment a price moves in your favour — push, email, or SMS.
         </p>
       </div>
 
@@ -119,8 +121,9 @@ export default async function PricingPage() {
             <span className="mb-1 text-zinc-400">AUD / month</span>
           </div>
           <p className="mt-1 text-xs text-zinc-600">or ${annualAmount > 0 ? annualAmount : 99}/year · Cancel anytime</p>
+          <p className="mt-3 text-xs text-amber-400/80">Get notified before the edge disappears</p>
 
-          <ul className="mt-6 flex-1 space-y-2.5">
+          <ul className="mt-4 flex-1 space-y-2.5">
             {PRO_FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
                 <span className="mt-0.5 shrink-0 text-amber-500">✓</span>
@@ -173,7 +176,7 @@ export default async function PricingPage() {
           All prices in Australian dollars (AUD) · GST included · Billed via Stripe · Cancel anytime from settings
         </p>
         <p className="text-xs text-zinc-700">
-          Arb windows close in minutes. Pro users get notified the second one opens.
+          Odds move fast. Pro users are notified the second a price, line, or arb crosses their threshold.
         </p>
       </div>
     </div>

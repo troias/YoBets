@@ -159,11 +159,12 @@ model BetLog {
   odds       Decimal   @db.Decimal(6, 2)
   stake      Decimal   @db.Decimal(10, 2)
   betType    String    @default("manual") @map("bet_type")
-  result     String    @default("pending")
-  profit     Decimal?  @db.Decimal(10, 2)
-  placedAt   DateTime  @default(now()) @map("placed_at") @db.Timestamptz
-  settledAt  DateTime? @map("settled_at") @db.Timestamptz
-  notes      String?
+  result       String    @default("pending")
+  profit       Decimal?  @db.Decimal(10, 2)
+  closingOdds  Decimal?  @map("closing_odds") @db.Decimal(6, 2)
+  placedAt     DateTime  @default(now()) @map("placed_at") @db.Timestamptz
+  settledAt    DateTime? @map("settled_at") @db.Timestamptz
+  notes        String?
 
   @@index([userId, placedAt])
   @@map("bet_log")
