@@ -5,7 +5,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 
-type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null; updatedAt: Date };
+type SnapRow  = { matchId: string; bookmaker: string; outcome: string | null; price: number | string };
 type NrlMatchRow = { id: string; homeTeam: string; awayTeam: string; kickoffAt: Date; status: string; sport: string; odds: OddsRow[] };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
@@ -131,6 +132,41 @@ export default async function NRLPage({
     orderBy: { kickoffAt: "asc" },
   }) as unknown as NrlMatchRow[];
 
+  // Snapshots from ~1h ago — used to show ▲▼ movement on each cell
+  const matchIds = matches.map(m => m.id);
+  const snapshots = matchIds.length > 0
+    ? (await prisma.oddsSnapshot.findMany({
+        where: {
+          matchId: { in: matchIds },
+          marketType: market,
+          bookmaker: { in: activeBooks as any[] },
+          recordedAt: { gte: new Date(now.getTime() - 75 * 60_000), lte: new Date(now.getTime() - 45 * 60_000) },
+        },
+        select: { matchId: true, bookmaker: true, outcome: true, price: true },
+        orderBy: { recordedAt: "desc" },
+      })) as unknown as SnapRow[]
+    : [];
+
+  // One price per cell — most recent within the window
+  const prevPriceMap = new Map<string, number>();
+  for (const s of snapshots) {
+    const key = `${s.matchId}|${s.bookmaker}|${s.outcome}`;
+    if (!prevPriceMap.has(key)) prevPriceMap.set(key, Number(s.price));
+  }
+
+  // Last refreshed: newest updatedAt across all fetched odds
+  let latestUpdate: Date | null = null;
+  for (const m of matches) {
+    for (const o of m.odds) {
+      if (!latestUpdate || o.updatedAt > latestUpdate) latestUpdate = o.updatedAt;
+    }
+  }
+  const minutesAgo = latestUpdate ? Math.round((Date.now() - latestUpdate.getTime()) / 60_000) : null;
+  const freshLabel = minutesAgo === null ? null
+    : minutesAgo < 2  ? "just now"
+    : minutesAgo < 60 ? `${minutesAgo}m ago`
+    : `${Math.round(minutesAgo / 60)}h ago`;
+
   const outcomes = MARKET_OUTCOMES[market];
   const datePills = [
     pill("Today",    u({ date: "today",    books: allSelected ? "" : activeBooks.join(",") }), date === "today"),
@@ -147,7 +183,10 @@ export default async function NRLPage({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold">NRL Odds Board</h1>
-            <p className="text-sm text-zinc-400">12 bookmakers · next 7 days</p>
+            <p className="text-sm text-zinc-400">
+              12 bookmakers · next 7 days
+              {freshLabel && <span className="ml-2 text-zinc-600">· updated {freshLabel}</span>}
+            </p>
           </div>
           <MarketTabs active={market} basePath="/nrl" extra={`date=${date}${team ? `&team=${encodeURIComponent(team)}` : ""}${!allSelected ? `&books=${activeBooks.join(",")}` : ""}`} />
         </div>
@@ -259,14 +298,18 @@ export default async function NRLPage({
                                 const price = odd ? Number(odd.price) : null;
                                 const lineValue = odd?.lineValue !== undefined ? Number(odd.lineValue) : null;
                                 const isBest = price !== null && price === best;
+                                const prev = prevPriceMap.get(`${match.id}|${bm}|${outcome}`);
+                                const moved = prev !== undefined && price !== null ? price - prev : null;
+                                const drifted  = moved !== null && moved >  0.02;
+                                const shortened = moved !== null && moved < -0.02;
                                 return (
                                   <td key={bm} className="px-3 py-2.5 text-center">
                                     {price !== null ? (
                                       <a href={odd!.deepLinkUrl} target="_blank" rel="noopener noreferrer"
-                                        className={isBest
-                                          ? "font-semibold text-green-400 hover:text-green-300 whitespace-nowrap"
-                                          : "text-zinc-300 hover:text-zinc-100 whitespace-nowrap"}>
+                                        className={`inline-flex items-center gap-0.5 whitespace-nowrap ${isBest ? "font-semibold text-green-400 hover:text-green-300" : "text-zinc-300 hover:text-zinc-100"}`}>
                                         {cellLabel(market, price, lineValue)}
+                                        {drifted   && <span className="text-[9px] text-blue-400">▲</span>}
+                                        {shortened && <span className="text-[9px] text-red-400">▼</span>}
                                       </a>
                                     ) : (
                                       <span className="text-zinc-700">—</span>
