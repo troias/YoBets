@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { BarChart2, Shield, TrendingUp, Settings, LayoutDashboard, Radio, Activity, BookOpen, Gift } from "lucide-react";
+import { BarChart2, Shield, TrendingUp, Settings, LayoutDashboard, Radio, Activity, BookOpen, Gift, Zap } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 
 const navItems = [
+  { href: "/brief",               label: "Market Brief",   icon: Zap },
   { href: "/dashboard",           label: "Dashboard",      icon: LayoutDashboard },
   { href: "/nrl",                 label: "Odds Board",     icon: Shield },
   { href: "/live",                label: "Live",           icon: Radio },
