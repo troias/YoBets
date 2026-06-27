@@ -5,6 +5,12 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { logBet, settleBet, deleteBet } from "@/app/actions/bets";
 
+type BetRow = {
+  id: string; userId: string; matchName: string; bookmaker: string; outcome: string;
+  odds: number | string; stake: number | string; profit: number | string | null;
+  result: string; betType: string; notes: string | null; placedAt: Date;
+};
+
 const BET_TYPE_LABEL: Record<string, string> = {
   manual: "Manual", arb: "Arb", ev: "EV", free_bet: "Free Bet",
 };
@@ -22,10 +28,10 @@ export default async function BetsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const bets = await prisma.betLog.findMany({
+  const bets = (await prisma.betLog.findMany({
     where: { userId: user.id },
     orderBy: { placedAt: "desc" },
-  });
+  })) as unknown as BetRow[];
 
   const settled = bets.filter(b => b.result !== "pending" && b.result !== "void");
   const totalStaked   = settled.reduce((s, b) => s + Number(b.stake), 0);

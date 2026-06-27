@@ -10,6 +10,9 @@ import prisma from "@/lib/prisma";
 import { saveAlertPrefs, addMatchAlert, deleteMatchAlert } from "@/app/actions/alert-prefs";
 import { PushToggle } from "@/components/push-toggle";
 
+type MatchRow = { id: string; homeTeam: string; awayTeam: string; kickoffAt: Date };
+type MatchAlertRow = { id: string; matchId: string; alertType: string; threshold: number | string | null; createdAt: Date };
+
 const STATUS_LABEL: Record<string, string> = {
   active: "Active",
   trialing: "Trial active",
@@ -52,8 +55,11 @@ export default async function SettingsPage() {
     }),
   ]);
 
+  const upcomingMatchRows = upcomingMatches as unknown as MatchRow[];
+  const matchAlertRows = matchAlerts as unknown as MatchAlertRow[];
+
   const monthlyPriceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "";
-  const matchMap = new Map(upcomingMatches.map((m) => [m.id, m]));
+  const matchMap = new Map<string, MatchRow>(upcomingMatchRows.map(m => [m.id, m]));
 
   return (
     <AppShell activePath="/settings" userEmail={user.email}>
@@ -243,7 +249,7 @@ export default async function SettingsPage() {
             <select name="matchId" title="Select match" required
               className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600">
               <option value="">Select match…</option>
-              {upcomingMatches.map((m) => (
+              {upcomingMatchRows.map((m: MatchRow) => (
                 <option key={m.id} value={m.id}>
                   {m.homeTeam} vs {m.awayTeam} · {m.kickoffAt.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
                 </option>
@@ -261,11 +267,11 @@ export default async function SettingsPage() {
             </button>
           </form>
 
-          {matchAlerts.length === 0 ? (
+          {matchAlertRows.length === 0 ? (
             <p className="text-xs text-zinc-600">No match alerts set.</p>
           ) : (
             <div className="space-y-2">
-              {matchAlerts.map((a) => {
+              {matchAlertRows.map((a: MatchAlertRow) => {
                 const match = matchMap.get(a.matchId);
                 const deleteAction = deleteMatchAlert.bind(null, a.id);
                 return (
