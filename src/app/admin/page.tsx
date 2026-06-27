@@ -8,6 +8,7 @@ type ApiKeyRow = { id: string; name: string; key: string; createdAt: Date; lastU
 import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig, setWorkerMode } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
+import { RefreshOddsButton } from "@/components/refresh-odds-button";
 
 const SERVICES = [
   { group: "The Odds API", entries: [{ label: "The Odds API Key", key: "THE_ODDS_API_KEY" }] },
@@ -150,6 +151,15 @@ export default async function AdminPage() {
           <p className="text-xs text-zinc-600">
             Production: 2/5/15/60 min · Slow: 12/30/90 min/6h · Off: pauses for 24h then rechecks
           </p>
+          <div className="border-t border-zinc-800 pt-3">
+            <p className="mb-2 text-xs text-zinc-500">Manual trigger (dev / one-off refresh)</p>
+            <RefreshOddsButton />
+            <p className="mt-2 text-xs text-zinc-600">
+              For auto-polling without Railway worker: point cron-job.org at{" "}
+              <code className="text-zinc-500">POST /api/cron</code> with{" "}
+              <code className="text-zinc-500">Authorization: Bearer $CRON_SECRET</code>
+            </p>
+          </div>
         </div>
 
         {/* App Config */}
