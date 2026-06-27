@@ -2,12 +2,6 @@ import { Resend } from "resend";
 import twilio from "twilio";
 import webpush from "web-push";
 
-webpush.setVapidDetails(
-  "mailto:alerts@edgeboard.com.au",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
-  process.env.VAPID_PRIVATE_KEY ?? "",
-);
-
 const FROM_EMAIL = "EdgeBoard Alerts <alerts@edgeboard.com.au>";
 const FROM_PHONE = process.env.TWILIO_PHONE_NUMBER ?? "";
 
@@ -38,6 +32,11 @@ export async function sendPush(
   body: string,
   url: string,
 ): Promise<void> {
+  webpush.setVapidDetails(
+    "mailto:alerts@edgeboard.com.au",
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
+    process.env.VAPID_PRIVATE_KEY ?? "",
+  );
   const payload = JSON.stringify({ title, body, url });
   await Promise.allSettled(
     subscriptions.map(sub =>
