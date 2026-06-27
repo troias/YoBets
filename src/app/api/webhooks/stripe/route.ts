@@ -2,8 +2,6 @@ import { type NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
 // Stripe v22 types are strict — we use loose shapes for webhook event objects
 // since we've already verified the signature before touching the data.
 type StripeSubscription = {
@@ -24,6 +22,7 @@ type StripeCheckoutSession = {
 };
 
 export async function POST(request: NextRequest) {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const body = await request.text();
   const sig = request.headers.get("stripe-signature");
 
