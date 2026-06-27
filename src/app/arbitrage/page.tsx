@@ -7,6 +7,7 @@ import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 import { PaywallGate } from "@/components/paywall-gate";
 import { ArbPushNudge } from "@/components/arb-push-nudge";
 import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import { KickoffCountdown } from "@/components/kickoff-countdown";
 import Link from "next/link";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://edgeboard.com.au";
@@ -194,6 +195,12 @@ export default async function ArbitragePage({
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Bookmaker balances from cookie — used to scale arb stake suggestions
+  const balancesCookieRaw = (await cookieStore).get("bm_balances")?.value ?? "";
+  let bmBalances: Record<string, number> = {};
+  try { bmBalances = balancesCookieRaw ? JSON.parse(decodeURIComponent(balancesCookieRaw)) : {}; }
+  catch { /* ignore */ }
+
   const subStatus = user ? await getSubscriptionStatus(user.id) : null;
   const subscribed = subStatus ? isSubscribed(subStatus) : false;
 
@@ -212,14 +219,23 @@ export default async function ArbitragePage({
 
   const { gte, lte } = aestDateRange(date, now);
 
-  const [matches, lastArbsConfig] = await Promise.all([
+  const [matches, lastArbsConfig, lastArbAlert] = await Promise.all([
     prisma.match.findMany({
       where: { kickoffAt: { gte, lte } },
       include: { odds: { where: { marketType: market, bookmaker: { notIn: ["bet365"] } } } },
       orderBy: { kickoffAt: "asc" },
     }),
     prisma.appConfig.findUnique({ where: { key: "last_arbs" } }).catch(() => null),
+    prisma.alertLog.findFirst({
+      where: { alertType: "arb" },
+      orderBy: { sentAt: "desc" },
+      select: { sentAt: true },
+    }).catch(() => null),
   ]);
+
+  const lastArbHoursAgo = lastArbAlert
+    ? Math.round((now.getTime() - lastArbAlert.sentAt.getTime()) / 3_600_000)
+    : null;
 
   const arbs: ArbResult[] = [];
   for (const match of matches) {
@@ -351,7 +367,12 @@ export default async function ArbitragePage({
           <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-10 text-center space-y-3">
             <p className="text-sm font-medium text-zinc-300">No live arbs right now</p>
             <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-              Arbs appear when books disagree enough to cover both sides. They&apos;re rare — and they close in 10–20 minutes when they do appear.
+              Arbs appear when bookmakers disagree enough that you can cover both sides for a guaranteed profit. Most open for under 10 minutes before the books adjust.
+              {lastArbHoursAgo !== null && lastArbHoursAgo < 72 && (
+                <span className="block mt-1 text-zinc-600">
+                  Last arb was found {lastArbHoursAgo === 0 ? "less than an hour" : `${lastArbHoursAgo}h`} ago. Check back closer to kickoff.
+                </span>
+              )}
             </p>
             {!subscribed && (
               <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-5 py-4 max-w-sm mx-auto">
@@ -382,7 +403,11 @@ export default async function ArbitragePage({
                   <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
                     <div>
                       <div className="font-medium">{arb.matchName}</div>
-                      <div className="mt-0.5 text-xs text-zinc-500">{kickoff} AEST</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
+                        <span>{kickoff} AEST</span>
+                        <span className="text-zinc-700">·</span>
+                        <KickoffCountdown kickoffAt={arb.kickoffAt.toISOString()} />
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <a
@@ -394,41 +419,80 @@ export default async function ArbitragePage({
                       >
                         Share 𝕏
                       </a>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-sm font-bold text-amber-400">
-                          +{arb.roiPercent.toFixed(2)}%
-                        </span>
-                        <span className="text-xs text-zinc-500">
-                          ${arb.guaranteedReturn.toFixed(2)} return on $100
-                        </span>
-                      </div>
+                      {(() => {
+                      // Scale stakes based on bookmaker balances
+                      const leg0bal = bmBalances[arb.legs[0]?.bookmaker];
+                      const leg1bal = bmBalances[arb.legs[1]?.bookmaker];
+                      const hasBalances = leg0bal != null || leg1bal != null;
+                      let scaledTotal = 100;
+                      let limitingBook: string | null = null;
+                      if (hasBalances) {
+                        arb.legs.forEach((leg, i) => {
+                          const bal = bmBalances[leg.bookmaker];
+                          if (bal == null) return;
+                          const share = leg.stake / 100;
+                          const maxForThis = bal / share;
+                          if (maxForThis < scaledTotal) { scaledTotal = maxForThis; limitingBook = leg.bookmaker; }
+                        });
+                      }
+                      const scaleFactor = scaledTotal / 100;
+                      return (
+                        <>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-sm font-bold text-amber-400">
+                              +{arb.roiPercent.toFixed(2)}%
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                              ${(arb.guaranteedReturn * scaleFactor).toFixed(2)} return on ${scaledTotal.toFixed(0)}
+                              {limitingBook && <span className="text-zinc-700"> · capped by {BOOKMAKER_LABEL[limitingBook]}</span>}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                     </div>
                   </div>
                   <div className="divide-y divide-zinc-800/50">
-                    {arb.legs.map((leg) => (
-                      <div key={leg.bookmaker + leg.outcome} className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="w-20 text-xs text-zinc-500">
-                            {BOOKMAKER_LABEL[leg.bookmaker] ?? leg.bookmaker}
-                          </span>
-                          <span className="text-sm text-zinc-200">{leg.outcome}</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <div className="text-sm font-medium text-zinc-100">@ {leg.odds.toFixed(2)}</div>
-                            <div className="text-xs text-zinc-500">Stake ${leg.stake.toFixed(2)}</div>
+                    {arb.legs.map((leg) => {
+                      // Recompute scaled stake
+                      let scaledTotal = 100;
+                      arb.legs.forEach(l => {
+                        const bal = bmBalances[l.bookmaker];
+                        if (bal == null) return;
+                        const share = l.stake / 100;
+                        const maxForThis = bal / share;
+                        if (maxForThis < scaledTotal) scaledTotal = maxForThis;
+                      });
+                      const scaledStake = leg.stake * (scaledTotal / 100);
+                      const hasBalance = Object.keys(bmBalances).length > 0;
+                      return (
+                        <div key={leg.bookmaker + leg.outcome} className="flex items-center justify-between px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className="w-20 text-xs text-zinc-500">
+                              {BOOKMAKER_LABEL[leg.bookmaker] ?? leg.bookmaker}
+                            </span>
+                            <span className="text-sm text-zinc-200">{leg.outcome}</span>
                           </div>
-                          <a
-                            href={`/api/bet?bm=${leg.bookmaker}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-700 hover:text-zinc-100"
-                          >
-                            Bet →
-                          </a>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-zinc-100">@ {leg.odds.toFixed(2)}</div>
+                              <div className="text-xs text-zinc-500">
+                                Stake ${scaledStake.toFixed(2)}
+                                {hasBalance && scaledStake !== leg.stake && <span className="text-zinc-700"> (${leg.stake.toFixed(2)} per $100)</span>}
+                              </div>
+                            </div>
+                            <a
+                              href={`/api/bet?bm=${leg.bookmaker}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-700 hover:text-zinc-100"
+                            >
+                              Bet →
+                            </a>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

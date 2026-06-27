@@ -6,7 +6,6 @@ const protectedRoutes = [
   "/live",
   "/ev",
   "/arbitrage",
-  "/nrl",
   "/settings",
   "/admin",
 ];
@@ -36,7 +35,6 @@ export const config = {
     "/live/:path*",
     "/ev/:path*",
     "/arbitrage/:path*",
-    "/nrl/:path*",
     "/settings/:path*",
     "/admin/:path*",
   ],

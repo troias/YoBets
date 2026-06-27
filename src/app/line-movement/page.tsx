@@ -211,7 +211,7 @@ export default async function LineMovementPage({
           </h2>
           {movements.length === 0 ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-8 text-center text-sm text-zinc-500">
-              No moves ≥{minMove}% in the last {windowKey}. Data builds up as the worker polls each cycle.
+              No moves ≥{minMove}% in the last {windowKey}. The worker polls every 2–15 min depending on kickoff proximity — data accumulates each cycle. Try widening the window or lowering the minimum move.
             </div>
           ) : isMobile ? (
             <div className="space-y-2">

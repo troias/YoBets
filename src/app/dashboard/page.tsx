@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PaywallGate } from "@/components/paywall-gate";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 import { LastVisitUpdater } from "@/components/last-visit-updater";
+import { getSubscriptionStatus, isSubscribed, isAdminEmail } from "@/lib/subscription";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
 
@@ -22,12 +23,18 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const sevenDaysOut = new Date(now.getTime() + 7 * 86_400_000);
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
+
+  const subStatus = user ? await getSubscriptionStatus(user.id) : null;
+  const subscribed = subStatus ? isSubscribed(subStatus) : false;
+  const isAdmin = isAdminEmail(user?.email);
+  const isFree = !subscribed && !isAdmin;
 
   const lastVisitRaw = cookieStore.get("last_visit")?.value;
   const lastVisit = lastVisitRaw ? new Date(lastVisitRaw) : null;
   const lastVisitValid = lastVisit && (now.getTime() - lastVisit.getTime()) < 24 * 3_600_000 && lastVisit < now;
 
-  const [upcomingMatches, liveMatches, recentMoves, sinceVisitMoves] = await Promise.all([
+  const [upcomingMatches, liveMatches, recentMoves, sinceVisitMoves, recentAlertKeys] = await Promise.all([
     prisma.match.findMany({
       where: { kickoffAt: { gte: now, lte: sevenDaysOut }, status: "upcoming" },
       include: { odds: { where: { marketType: "h2h", bookmaker: { notIn: ["bet365"] } } } },
@@ -52,7 +59,21 @@ export default async function DashboardPage() {
           include: { match: { select: { homeTeam: true, awayTeam: true } } },
         })
       : Promise.resolve([] as Awaited<ReturnType<typeof prisma.oddsSnapshot.findMany<{ include: { match: { select: { homeTeam: true; awayTeam: true } } } }>>>),
+    isFree
+      ? prisma.alertLog.findMany({
+          where: { sentAt: { gte: weekAgo } },
+          select: { alertType: true, key: true },
+          distinct: ["alertType", "key"],
+        })
+      : Promise.resolve([] as { alertType: string; key: string }[]),
   ]);
+
+  // Ghost alert counts for free users
+  const ghostByType: Record<string, number> = {};
+  for (const row of recentAlertKeys) {
+    ghostByType[row.alertType] = (ghostByType[row.alertType] ?? 0) + 1;
+  }
+  const totalGhostAlerts = Object.values(ghostByType).reduce((s, v) => s + v, 0);
 
   // Find arbs across all upcoming matches
   const arbs: Array<{ matchName: string; roi: number; bookmakers: string }> = [];
@@ -213,6 +234,42 @@ export default async function DashboardPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Ghost alerts panel — free users only */}
+          {isFree && (totalGhostAlerts > 0 || arbs.length > 0 || evBets.length > 0) && (
+            <div className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-zinc-100">
+                    {totalGhostAlerts > 0
+                      ? <>Pro would have sent you <span className="text-amber-400">{totalGhostAlerts} alert{totalGhostAlerts !== 1 ? "s" : ""}</span> this week</>
+                      : <>Pro users are being alerted right now</>}
+                  </p>
+                  {totalGhostAlerts > 0 ? (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
+                      {ghostByType.arb   && <span><span className="font-semibold text-amber-400">{ghostByType.arb}</span> arb {ghostByType.arb === 1 ? "opportunity" : "opportunities"}</span>}
+                      {ghostByType.ev    && <span><span className="font-semibold text-amber-400">{ghostByType.ev}</span> +EV {ghostByType.ev === 1 ? "bet" : "bets"}</span>}
+                      {ghostByType.steam && <span><span className="font-semibold text-amber-400">{ghostByType.steam}</span> steam {ghostByType.steam === 1 ? "move" : "moves"}</span>}
+                      {ghostByType.hot   && <span><span className="font-semibold text-amber-400">{ghostByType.hot}</span> hot {ghostByType.hot === 1 ? "market" : "markets"}</span>}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-500">
+                      {arbs.length > 0 && <>{arbs.length} arb{arbs.length !== 1 ? "s" : ""} open · avg {(arbs.reduce((s, a) => s + a.roi, 0) / arbs.length).toFixed(2)}% ROI · </>}
+                      {evBets.length > 0 && <>{evBets.length} +EV bet{evBets.length !== 1 ? "s" : ""} · </>}
+                      push, email & SMS — delivered the second they appear
+                    </p>
+                  )}
+                </div>
+                <Link href="/pricing"
+                  className="shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-black transition hover:bg-amber-400">
+                  Start free trial →
+                </Link>
+              </div>
+              <p className="text-[11px] text-zinc-600">
+                These windows close fast — the last arb averaged under 10 minutes before odds adjusted.
+              </p>
             </div>
           )}
 

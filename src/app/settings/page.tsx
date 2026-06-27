@@ -8,6 +8,8 @@ import { ManageBillingButton } from "@/components/billing/manage-billing-button"
 import { CheckoutButton } from "@/components/billing/checkout-button";
 import prisma from "@/lib/prisma";
 import { saveAlertPrefs, addMatchAlert, deleteMatchAlert } from "@/app/actions/alert-prefs";
+import { BookmakerBalances } from "@/components/bookmaker-balances";
+import { ReferralSection } from "@/components/referral-section";
 import { deletePriceAlert } from "@/app/actions/price-alerts";
 import { PushToggle } from "@/components/push-toggle";
 
@@ -42,6 +44,25 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  // Generate or fetch referral code
+  const refKey = `ref_code_${user.id}`;
+  let refCodeRow = await prisma.appConfig.findUnique({ where: { key: refKey } });
+  if (!refCodeRow) {
+    const code = user.id.slice(-4).toUpperCase() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+    refCodeRow = await prisma.appConfig.upsert({
+      where: { key: refKey },
+      create: { key: refKey, label: "Referral code", value: code, updatedAt: new Date() },
+      update: {},
+    });
+    await prisma.appConfig.upsert({
+      where: { key: `ref_user_${code}` },
+      create: { key: `ref_user_${code}`, label: "Referral user", value: user.id, updatedAt: new Date() },
+      update: {},
+    });
+  }
+  const refCode = refCodeRow.value;
+  const refCount = await prisma.appConfig.count({ where: { key: { startsWith: "ref_used_" }, value: user.id } });
 
   const [status, sub, alertPrefs, matchAlerts, upcomingMatches, priceAlerts] = await Promise.all([
     getSubscriptionStatus(user.id),
@@ -337,6 +358,16 @@ export default async function SettingsPage() {
             </div>
           )}
         </div>
+
+        {/* Referral */}
+        <ReferralSection
+          refCode={refCode}
+          refCount={refCount}
+          siteUrl={process.env.NEXT_PUBLIC_APP_URL ?? "https://edgeboard.au"}
+        />
+
+        {/* Bookmaker Balances */}
+        <BookmakerBalances />
 
         {/* Admin link — only visible to admin */}
         {user.email === process.env.ADMIN_EMAIL && (

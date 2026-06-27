@@ -6,13 +6,18 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default function RegisterPage() {
+export default function RegisterPage({ refCode }: { refCode?: string }) {
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Save referral code to cookie so it persists through OAuth redirect
+  if (refCode && typeof document !== "undefined") {
+    document.cookie = `pending_ref=${refCode};path=/;max-age=${7 * 86400};samesite=lax`;
+  }
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -59,6 +64,13 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
         <p className="text-sm text-zinc-400">Free to start — Pro from $19 AUD/month</p>
       </div>
+
+      {refCode && (
+        <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3">
+          <p className="text-sm font-medium text-amber-400">You were referred — get 2 weeks free</p>
+          <p className="mt-0.5 text-xs text-amber-700">Sign up and start a Pro trial to claim your bonus 2 weeks.</p>
+        </div>
+      )}
 
       <Button
         onClick={signInWithGoogle}

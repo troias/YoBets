@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart2, Shield, TrendingUp, Settings, LayoutDashboard, Radio, Activity, BookOpen, Gift, Zap, ShieldCheck } from "lucide-react";
+import { BarChart2, Shield, TrendingUp, Settings, LayoutDashboard, Radio, Activity, BookOpen, Gift, Zap, ShieldCheck, Info, Bell } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { MobileMoreMenu } from "@/components/layout/mobile-more-menu";
@@ -14,7 +14,9 @@ const navItems = [
   { href: "/line-movement",       label: "Line Movement",  icon: Activity },
   { href: "/free-bet-converter",  label: "Free Bet Calc",  icon: Gift },
   { href: "/bets",                label: "Bet Tracker",    icon: BookOpen },
+  { href: "/notifications",        label: "Alerts",         icon: Bell },
   { href: "/settings",            label: "Settings",       icon: Settings },
+  { href: "/about",               label: "About",          icon: Info },
 ];
 
 // Primary 4 tabs always visible on mobile bottom bar
@@ -32,7 +34,9 @@ const mobileMoreItems = [
   { href: "/line-movement",      label: "Line Movement", icon: Activity },
   { href: "/bets",               label: "Bet Tracker",   icon: BookOpen },
   { href: "/free-bet-converter", label: "Free Bet Calc", icon: Gift },
+  { href: "/notifications",      label: "Alerts",        icon: Bell },
   { href: "/settings",           label: "Settings",      icon: Settings },
+  { href: "/about",              label: "About",         icon: Info },
 ];
 
 export function AppShell({
@@ -128,7 +132,13 @@ export function AppShell({
         </aside>
 
         {/* Main content — extra bottom padding on mobile so content isn't hidden by tab bar */}
-        <main className="pb-24 md:pb-4">{children}</main>
+        <main className="pb-24 md:pb-4">
+          {children}
+          <p className="mt-8 text-[11px] text-zinc-700 leading-relaxed">
+            EdgeBoard earns a commission when you sign up or deposit at a bookmaker via our links. This does not affect the odds we display — all prices are fetched directly from each bookmaker. Gamble responsibly.{" "}
+            <a href="https://www.gamblinghelponline.org.au" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-500 transition">Gambling Help Online 1800 858 858</a>.
+          </p>
+        </main>
       </div>
 
       {/* Mobile bottom tab bar */}

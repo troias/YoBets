@@ -8,6 +8,7 @@ import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 import { NextPollCountdown } from "@/components/next-poll-countdown";
 import { PriceAlertButton } from "@/components/price-alert-button";
+import { KickoffCountdown } from "@/components/kickoff-countdown";
 
 type OddsRow    = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null; updatedAt: Date };
 type SnapRow    = { matchId: string; bookmaker: string; outcome: string | null; price: number | string };
@@ -60,6 +61,11 @@ function aestDateRange(option: string, now: Date): { gte: Date; lte: Date } {
   return { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) };
 }
 
+export const metadata = {
+  title: "NRL Odds Comparison — Best Prices Across 11 Bookmakers | EdgeBoard",
+  description: "Compare NRL rugby league odds across Sportsbet, TAB, Ladbrokes, Neds, PointsBet, Unibet, BetRight, Betr, Betfair, TABtouch and PlayUp side by side. Updated every 30 minutes.",
+};
+
 function pill(label: string, href: string, active: boolean) { return { label, href, active }; }
 
 export default async function NRLPage({ searchParams }: { searchParams: Promise<{ market?: string; date?: string; team?: string; books?: string }> }) {
@@ -82,6 +88,7 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
+  const favTeam = (await cookieStore).get("fav_team")?.value ?? "";
 
   const now = new Date();
   const { gte, lte } = aestDateRange(date, now);
@@ -115,7 +122,7 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
     return u({ books: [...activeBooks, "bet365"].join(",") });
   }
 
-  const matches = await prisma.match.findMany({
+  const rawMatches = await prisma.match.findMany({
     where: {
       kickoffAt: { gte, lte },
       ...(team ? { OR: [{ homeTeam: { contains: team, mode: "insensitive" } }, { awayTeam: { contains: team, mode: "insensitive" } }] } : {}),
@@ -123,6 +130,17 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
     include: { odds: { where: { marketType: market, bookmaker: { in: activeBooks as any[] } }, orderBy: { bookmaker: "asc" } } },
     orderBy: { kickoffAt: "asc" },
   }) as unknown as NrlMatchRow[];
+
+  // Fav team floats to top within its kickoff day, rest sorted by kickoff
+  const matches = favTeam
+    ? [...rawMatches].sort((a, b) => {
+        const aFav = a.homeTeam.toLowerCase().includes(favTeam.toLowerCase()) || a.awayTeam.toLowerCase().includes(favTeam.toLowerCase());
+        const bFav = b.homeTeam.toLowerCase().includes(favTeam.toLowerCase()) || b.awayTeam.toLowerCase().includes(favTeam.toLowerCase());
+        if (aFav && !bFav) return -1;
+        if (!aFav && bFav) return 1;
+        return a.kickoffAt.getTime() - b.kickoffAt.getTime();
+      })
+    : rawMatches;
 
   const matchIds = matches.map(m => m.id);
   const snapshots = matchIds.length > 0
@@ -151,6 +169,7 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
   for (const m of matches) for (const o of m.odds) if (!latestUpdate || o.updatedAt > latestUpdate) latestUpdate = o.updatedAt;
   const minutesAgo = latestUpdate ? Math.round((Date.now() - latestUpdate.getTime()) / 60_000) : null;
   const freshLabel = minutesAgo === null ? null : minutesAgo < 2 ? "just now" : minutesAgo < 60 ? `${minutesAgo}m ago` : `${Math.round(minutesAgo / 60)}h ago`;
+  const isStale    = minutesAgo !== null && minutesAgo > 45;
 
   const outcomes  = MARKET_OUTCOMES[market];
   const datePills = [
@@ -227,6 +246,16 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
           )}
         </div>
 
+        {/* Stale data warning */}
+        {isStale && (
+          <div className="flex items-center gap-3 rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3">
+            <span className="text-amber-500">⚠</span>
+            <p className="text-xs text-amber-400">
+              Odds were last updated <span className="font-semibold">{freshLabel}</span>. The worker may be delayed — prices shown may not reflect the current market.
+            </p>
+          </div>
+        )}
+
         {/* Results */}
         {matches.length === 0 ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-10 text-center text-sm text-zinc-500">No matches found.</div>
@@ -253,19 +282,39 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
               });
               if (!bookmakers.length) return null;
 
+              const isFav = Boolean(favTeam && (
+                match.homeTeam.toLowerCase().includes(favTeam.toLowerCase()) ||
+                match.awayTeam.toLowerCase().includes(favTeam.toLowerCase())
+              ));
+              const favTeamName = isFav
+                ? (match.homeTeam.toLowerCase().includes(favTeam.toLowerCase()) ? match.homeTeam : match.awayTeam)
+                : null;
+              const starHref = isFav
+                ? `/api/fav-team?clear=1&back=${encodeURIComponent(`/nrl?${new URLSearchParams(Object.entries({ market, date, books: allSelected ? "" : activeBooks.join(",") }).filter(([,v]) => v !== "")).toString()}`)}`
+                : `/api/fav-team?team=${encodeURIComponent(match.homeTeam)}&back=${encodeURIComponent(`/nrl?${new URLSearchParams(Object.entries({ market, date, books: allSelected ? "" : activeBooks.join(",") }).filter(([,v]) => v !== "")).toString()}`)}`;
+
               // ── Mobile layout ─────────────────────────────────────────────
               if (isMobile) {
                 return (
-                  <div key={match.id} className={`overflow-hidden rounded-xl border bg-zinc-950/90 ${isHot ? "border-amber-500/40" : "border-zinc-800"}`}>
+                  <div key={match.id} className={`overflow-hidden rounded-xl border bg-zinc-950/90 ${isFav ? "border-sky-600/50" : isHot ? "border-amber-500/40" : "border-zinc-800"}`}>
                     {/* Match header */}
-                    <div className={`border-b px-4 py-3 ${isHot ? "border-amber-500/20" : "border-zinc-800"}`}>
+                    <div className={`border-b px-4 py-3 ${isFav ? "border-sky-600/30" : isHot ? "border-amber-500/20" : "border-zinc-800"}`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-sm font-medium leading-snug">
                           {match.homeTeam} <span className="text-zinc-500">vs</span> {match.awayTeam}
                         </div>
-                        {isHot && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-400">🔥 Spread</span>}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {isHot && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-400">🔥 Spread</span>}
+                          <a href={starHref} title={isFav ? "Remove favourite" : "Set as favourite team"} className="text-base leading-none">
+                            {isFav ? "★" : "☆"}
+                          </a>
+                        </div>
                       </div>
-                      <div className="mt-0.5 text-xs text-zinc-500">{kickoff} AEST</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
+                        <span>{kickoff} AEST</span>
+                        <span className="text-zinc-700">·</span>
+                        <KickoffCountdown kickoffAt={match.kickoffAt.toISOString()} />
+                      </div>
                     </div>
 
                     {/* Best price per outcome — 2 col */}
@@ -346,13 +395,25 @@ export default async function NRLPage({ searchParams }: { searchParams: Promise<
 
               // ── Desktop layout ────────────────────────────────────────────
               return (
-                <div key={match.id} className={`overflow-hidden rounded-xl border bg-zinc-950/90 ${isHot ? "border-amber-500/40" : "border-zinc-800"}`}>
-                  <div className={`border-b px-4 py-3 ${isHot ? "border-amber-500/20" : "border-zinc-800"}`}>
+                <div key={match.id} className={`overflow-hidden rounded-xl border bg-zinc-950/90 ${isFav ? "border-sky-600/50" : isHot ? "border-amber-500/40" : "border-zinc-800"}`}>
+                  <div className={`border-b px-4 py-3 ${isFav ? "border-sky-600/30" : isHot ? "border-amber-500/20" : "border-zinc-800"}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium">{match.homeTeam} <span className="text-zinc-500">vs</span> {match.awayTeam}</div>
-                      {isHot && <span className="shrink-0 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-400">🔥 Spread</span>}
+                      <div className="flex items-center gap-2 font-medium">
+                        {match.homeTeam} <span className="text-zinc-500">vs</span> {match.awayTeam}
+                        {isFav && <span className="rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-medium text-sky-400">{favTeamName}</span>}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {isHot && <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-400">🔥 Spread</span>}
+                        <a href={starHref} title={isFav ? "Remove favourite" : "Set as favourite team"} className="text-base text-zinc-500 hover:text-zinc-200 transition leading-none">
+                          {isFav ? "★" : "☆"}
+                        </a>
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-xs text-zinc-500">{kickoff} AEST</div>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
+                      <span>{kickoff} AEST</span>
+                      <span className="text-zinc-700">·</span>
+                      <KickoffCountdown kickoffAt={match.kickoffAt.toISOString()} />
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">

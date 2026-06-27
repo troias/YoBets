@@ -241,6 +241,26 @@ export default async function EVPage({
   }
   evRows.sort((a, b) => b.evPercent - a.evPercent);
 
+  // For empty-state context: total positive-EV bets at threshold=0, and last alert_log entry
+  const allPositiveCount = evRows.length === 0 && minEv > 0
+    ? matches.reduce((total, match) => {
+        const matchEvRows = computeEV(match.id, `${match.homeTeam} vs ${match.awayTeam}`, match.kickoffAt, match.homeTeam, match.awayTeam, market, match.odds, 0);
+        return total + matchEvRows.length;
+      }, 0)
+    : 0;
+
+  const lastEvAlert = evRows.length === 0
+    ? await prisma.alertLog.findFirst({
+        where: { alertType: "ev" },
+        orderBy: { sentAt: "desc" },
+        select: { sentAt: true, key: true },
+      }).catch(() => null)
+    : null;
+
+  const lastEvHoursAgo = lastEvAlert
+    ? Math.round((now.getTime() - lastEvAlert.sentAt.getTime()) / 3_600_000)
+    : null;
+
   const checkedAt = now.toLocaleTimeString("en-AU", {
     timeZone: "Australia/Sydney",
     hour: "numeric",
@@ -345,13 +365,23 @@ export default async function EVPage({
         </p>
 
         {evRows.length === 0 ? (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-10 text-center">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-8 text-center space-y-2">
             <p className="text-sm font-medium text-zinc-300">
               No bets above +{minEv}% EV right now
             </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Try lowering the threshold, switching markets, or check back when odds move closer to kick-off.
-            </p>
+            {allPositiveCount > 0 ? (
+              <p className="text-xs text-zinc-500">
+                {allPositiveCount} positive-EV bet{allPositiveCount !== 1 ? "s" : ""} exist below your {minEv}% threshold —{" "}
+                <a href={`?market=${market}&date=${date}&minEv=0`} className="text-amber-500 hover:text-amber-400 transition">remove the filter</a> to see them.
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-500">
+                +EV bets typically surface in the 1–3h window before kickoff when books start shading one side. Check back as matches approach.
+                {lastEvHoursAgo !== null && lastEvHoursAgo < 48 && (
+                  <span className="block mt-1 text-zinc-600">Last +EV bet was found {lastEvHoursAgo === 0 ? "less than an hour" : `${lastEvHoursAgo}h`} ago.</span>
+                )}
+              </p>
+            )}
           </div>
         ) : isMobile ? (
           /* ── Mobile: card per row ──────────────────────────────────────── */

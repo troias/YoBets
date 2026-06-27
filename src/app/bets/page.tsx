@@ -52,6 +52,22 @@ export default async function BetsPage() {
 
   const hasClv = withClv.length > 0;
 
+  // Per-bookmaker breakdown
+  type BookStats = { bets: number; staked: number; profit: number; wins: number };
+  const byBook = new Map<string, BookStats>();
+  for (const b of settled) {
+    const existing = byBook.get(b.bookmaker) ?? { bets: 0, staked: 0, profit: 0, wins: 0 };
+    byBook.set(b.bookmaker, {
+      bets:   existing.bets + 1,
+      staked: existing.staked + Number(b.stake),
+      profit: existing.profit + Number(b.profit ?? 0),
+      wins:   existing.wins + (b.result === "win" ? 1 : 0),
+    });
+  }
+  const bookRows = [...byBook.entries()]
+    .map(([name, s]) => ({ name, ...s, roi: s.staked > 0 ? (s.profit / s.staked) * 100 : 0 }))
+    .sort((a, b) => b.profit - a.profit);
+
   return (
     <AppShell activePath="/bets" userEmail={user.email}>
       <div className="space-y-5">
@@ -93,6 +109,47 @@ export default async function BetsPage() {
                     : "CLV below zero means you're typically getting worse than closing price. Try targeting earlier markets."}
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Per-bookmaker breakdown */}
+        {bookRows.length > 1 && (
+          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <h2 className="text-sm font-medium text-zinc-300">Performance by bookmaker</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Bookmaker</th>
+                    <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Bets</th>
+                    <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Staked</th>
+                    <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">P&amp;L</th>
+                    <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">ROI</th>
+                    <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Win rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookRows.map((row, i) => (
+                    <tr key={row.name} className={i % 2 === 0 ? "bg-transparent" : "bg-zinc-950/40"}>
+                      <td className="px-4 py-3 font-medium text-zinc-200">{row.name}</td>
+                      <td className="px-4 py-3 text-center text-zinc-400">{row.bets}</td>
+                      <td className="px-4 py-3 text-center text-zinc-400">${row.staked.toFixed(2)}</td>
+                      <td className={`px-4 py-3 text-center font-semibold ${row.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {row.profit >= 0 ? "+" : ""}${row.profit.toFixed(2)}
+                      </td>
+                      <td className={`px-4 py-3 text-center font-semibold ${row.roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {row.roi >= 0 ? "+" : ""}{row.roi.toFixed(1)}%
+                      </td>
+                      <td className="px-4 py-3 text-center text-zinc-400">
+                        {row.bets > 0 ? `${Math.round((row.wins / row.bets) * 100)}%` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

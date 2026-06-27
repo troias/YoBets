@@ -311,6 +311,68 @@ The worker polls bookmakers and writes odds to the database.
 
 ---
 
+## 8b. Cron Jobs — Emails & Digests
+
+There are three additional cron endpoints beyond the main odds-polling worker. All require the `x-cron-secret` header (same `CRON_SECRET` env var).
+
+### Endpoints
+
+| Endpoint | Purpose | Recommended schedule |
+|---|---|---|
+| `POST /api/cron/digest` | Game-day digest — 9am email with best NRL bets, only fires when there are games today | `0 23 * * *` (23:00 UTC = 09:00 AEST) |
+| `POST /api/cron/weekly-summary` | Monday morning P&L summary for users with settled bets in the last 7 days | `0 23 * * 0` (23:00 UTC Sunday = 09:00 AEST Monday) |
+| `POST /api/cron/trial-emails` | Trial sequence — Day 1/3/6 onboarding emails to trialing users | `0 23 * * *` (daily, same time as digest) |
+| `POST /api/digest` | Legacy user-specific digest (fires at each user's chosen time) | Every minute (already wired) |
+
+### cron-job.org setup (free, 3 jobs needed)
+
+1. Go to [cron-job.org](https://cron-job.org) → Create cronjob
+2. **URL:** `https://yourdomain.com/api/cron/digest`
+3. **Schedule:** custom — `0 23 * * *`
+4. **Headers:** `x-cron-secret: YOUR_CRON_SECRET`
+5. Repeat for `/api/cron/weekly-summary` (schedule: `0 23 * * 0`) and `/api/cron/trial-emails` (schedule: `0 23 * * *`)
+
+> Tip: all three daily jobs can share the same 23:00 UTC schedule. cron-job.org runs them in parallel — no conflict.
+
+### Vercel cron (if hosting on Vercel)
+
+Add to `vercel.json`:
+
+```json
+{
+  "crons": [
+    { "path": "/api/cron/digest",          "schedule": "0 23 * * *" },
+    { "path": "/api/cron/weekly-summary",  "schedule": "0 23 * * 0" },
+    { "path": "/api/cron/trial-emails",    "schedule": "0 23 * * *" }
+  ]
+}
+```
+
+Vercel cron calls with `GET` not `POST` and doesn't support custom headers — wrap with a `GET` handler that checks `CRON_SECRET` via query param or use cron-job.org instead.
+
+### Railway cron (if hosting on Railway)
+
+In your Railway project, add a Cron service:
+- **Command:** `curl -s -X POST https://yourdomain.com/api/cron/digest -H "x-cron-secret: $CRON_SECRET"`
+- **Schedule:** `0 23 * * *`
+
+Duplicate for weekly-summary and trial-emails.
+
+### Testing manually
+
+```bash
+curl -X POST https://yourdomain.com/api/cron/digest \
+  -H "x-cron-secret: YOUR_CRON_SECRET"
+
+curl -X POST https://yourdomain.com/api/cron/weekly-summary \
+  -H "x-cron-secret: YOUR_CRON_SECRET"
+
+curl -X POST https://yourdomain.com/api/cron/trial-emails \
+  -H "x-cron-secret: YOUR_CRON_SECRET"
+```
+
+---
+
 ## 9. Push Notifications
 
 Browser push alerts for arbs, steam moves, etc.
