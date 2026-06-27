@@ -27,17 +27,6 @@ const mobilePrimaryTabs = [
   { href: "/dashboard", label: "Home",  icon: LayoutDashboard },
 ];
 
-// Secondary items accessible via "More" drawer
-const mobileMoreItems = [
-  { href: "/brief",              label: "Market Brief",  icon: Zap },
-  { href: "/live",               label: "Live",          icon: Radio },
-  { href: "/line-movement",      label: "Line Movement", icon: Activity },
-  { href: "/bets",               label: "Bet Tracker",   icon: BookOpen },
-  { href: "/free-bet-converter", label: "Free Bet Calc", icon: Gift },
-  { href: "/notifications",      label: "Alerts",        icon: Bell },
-  { href: "/settings",           label: "Settings",      icon: Settings },
-  { href: "/about",              label: "About",         icon: Info },
-];
 
 export function AppShell({
   children,
@@ -159,7 +148,7 @@ export function AppShell({
             </Link>
           );
         })}
-        <MobileMoreMenu activePath={activePath} items={mobileMoreItems} />
+        <MobileMoreMenu activePath={activePath} />
       </nav>
     </div>
   );

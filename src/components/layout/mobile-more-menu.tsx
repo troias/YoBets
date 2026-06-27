@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MoreHorizontal, type LucideIcon } from "lucide-react";
+import { MoreHorizontal, Zap, Radio, Activity, BookOpen, Gift, Bell, Settings, Info } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+const items = [
+  { href: "/brief",              label: "Market Brief",  icon: Zap },
+  { href: "/live",               label: "Live",          icon: Radio },
+  { href: "/line-movement",      label: "Line Movement", icon: Activity },
+  { href: "/bets",               label: "Bet Tracker",   icon: BookOpen },
+  { href: "/free-bet-converter", label: "Free Bet Calc", icon: Gift },
+  { href: "/notifications",      label: "Alerts",        icon: Bell },
+  { href: "/settings",           label: "Settings",      icon: Settings },
+  { href: "/about",              label: "About",         icon: Info },
+];
 
-export function MobileMoreMenu({
-  activePath,
-  items,
-}: {
-  activePath: string;
-  items: NavItem[];
-}) {
+export function MobileMoreMenu({ activePath }: { activePath: string }) {
   const [open, setOpen] = useState(false);
   const isActiveInMore = items.some(item => activePath.startsWith(item.href));
 
