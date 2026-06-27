@@ -51,7 +51,7 @@ export default async function AdminPage() {
   const mrr = priceMonthly > 0 ? active * priceMonthly : null;
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
-  const configMap = new Map(appConfigs.map((c: AppConfigRow) => [c.key, c]));
+  const configMap = new Map<string, AppConfigRow>(appConfigs.map((c: AppConfigRow) => [c.key, c]));
   const customConfigs = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key));
 
   const statCards = [
