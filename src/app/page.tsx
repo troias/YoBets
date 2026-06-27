@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
+type PreviewOdds = { bookmaker: string; outcome: string | null; price: number | string };
+
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",
   neds: "Neds", pointsbet: "PointsBet", unibet: "Unibet", betright: "BetRight",
@@ -59,15 +61,16 @@ export default async function HomePage() {
     }),
   ]);
 
+  const previewOdds = (previewMatch?.odds ?? []) as unknown as PreviewOdds[];
   const previewBookmakers = previewMatch
-    ? [...new Set(previewMatch.odds.map((o) => o.bookmaker))].slice(0, 6)
+    ? [...new Set(previewOdds.map(o => o.bookmaker))].slice(0, 6)
     : [];
 
   const bestHome = previewMatch
-    ? Math.max(...previewMatch.odds.filter((o) => o.outcome === "home").map((o) => Number(o.price)))
+    ? Math.max(...previewOdds.filter(o => o.outcome === "home").map(o => Number(o.price)))
     : 0;
   const bestAway = previewMatch
-    ? Math.max(...previewMatch.odds.filter((o) => o.outcome === "away").map((o) => Number(o.price)))
+    ? Math.max(...previewOdds.filter(o => o.outcome === "away").map(o => Number(o.price)))
     : 0;
 
   return (
@@ -205,14 +208,14 @@ export default async function HomePage() {
                   {(["home", "away"] as const).map((outcome) => {
                     const label = outcome === "home" ? previewMatch.homeTeam : previewMatch.awayTeam;
                     const best = outcome === "home" ? bestHome : bestAway;
-                    const rows = previewMatch.odds.filter((o) => o.outcome === outcome);
+                    const rows = previewOdds.filter(o => o.outcome === outcome);
                     return (
                       <tr key={outcome} className="border-b border-zinc-800/40 last:border-0">
                         <td className="px-5 py-3 text-xs text-zinc-400">
                           {label.split(" ").slice(-1)[0]}
                         </td>
                         {previewBookmakers.map((bm) => {
-                          const odd = rows.find((o) => o.bookmaker === bm);
+                          const odd = rows.find(o => o.bookmaker === bm);
                           const price = odd ? Number(odd.price) : null;
                           const isBest = price !== null && price === best;
                           return (
