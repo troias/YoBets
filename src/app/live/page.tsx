@@ -6,6 +6,7 @@ import { PaywallGate } from "@/components/paywall-gate";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
 type SnapRow = { bookmaker: string; outcome: string | null; recordedAt: Date; price: number | string };
+type LiveMatchRow = { id: string; homeTeam: string; awayTeam: string; kickoffAt: Date; status: string; odds: OddsRow[]; snapshots: SnapRow[] };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",
@@ -39,7 +40,7 @@ export default async function LivePage() {
       },
     },
     orderBy: { kickoffAt: "asc" },
-  });
+  }) as unknown as LiveMatchRow[];
 
   const checkedAt = now.toLocaleTimeString("en-AU", { timeZone: "Australia/Sydney", hour: "numeric", minute: "2-digit", hour12: true });
 

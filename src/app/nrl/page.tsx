@@ -6,6 +6,7 @@ import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
+type NrlMatchRow = { id: string; homeTeam: string; awayTeam: string; kickoffAt: Date; status: string; sport: string; odds: OddsRow[] };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet",
@@ -128,7 +129,7 @@ export default async function NRLPage({
       },
     },
     orderBy: { kickoffAt: "asc" },
-  });
+  }) as unknown as NrlMatchRow[];
 
   const outcomes = MARKET_OUTCOMES[market];
   const datePills = [
