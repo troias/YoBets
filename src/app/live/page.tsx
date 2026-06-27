@@ -4,8 +4,8 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { PaywallGate } from "@/components/paywall-gate";
 
-type OddsRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { odds: true } }>>>[number]["odds"][number];
-type SnapRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { snapshots: true } }>>>[number]["snapshots"][number];
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
+type SnapRow = { bookmaker: string; outcome: string | null; recordedAt: Date; price: unknown };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",

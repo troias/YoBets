@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendEmail, sendSms, sendPush } from "@/lib/alerts";
 
-type OddsRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { odds: true } }>>>[number]["odds"][number];
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
 
 // Called by a cron job (Railway cron or Vercel cron) once per minute.
 // Only sends to users whose digestTime matches the current hour:minute (AEST).

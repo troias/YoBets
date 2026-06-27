@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PaywallGate } from "@/components/paywall-gate";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 
-type OddsRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { odds: true } }>>>[number]["odds"][number];
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",

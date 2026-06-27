@@ -5,7 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 
-type OddsRow = Awaited<ReturnType<typeof prisma.match.findMany<{ include: { odds: true } }>>>[number]["odds"][number];
+type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: unknown };
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet",

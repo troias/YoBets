@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 
-type AppConfigRow = Awaited<ReturnType<typeof prisma.appConfig.findMany>>[number];
-type ApiKeyRow = Awaited<ReturnType<typeof prisma.apiKey.findMany>>[number];
+type AppConfigRow = { id: string; key: string; label: string; value: string; createdAt: Date; updatedAt: Date };
+type ApiKeyRow = { id: string; name: string; key: string; createdAt: Date; lastUsedAt: Date | null };
 import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
