@@ -99,10 +99,10 @@ async function main() {
   console.log("\n4. Verifying DB state...");
   const matchCount = await prisma.match.count();
   const oddsCount = await prisma.odds.count();
-  const bookmakers = await prisma.odds.findMany({
+  const bookmakers = (await prisma.odds.findMany({
     distinct: ["bookmaker"],
     select: { bookmaker: true },
-  });
+  })) as unknown as { bookmaker: string }[];
 
   console.log(`   matches table: ${matchCount} rows`);
   console.log(`   odds table:    ${oddsCount} rows`);
