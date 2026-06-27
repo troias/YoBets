@@ -44,3 +44,14 @@ export async function deleteAppConfig(id: string, _formData: FormData) {
   await assertAdmin();
   await prisma.appConfig.delete({ where: { id } });
 }
+
+export async function setWorkerMode(formData: FormData) {
+  await assertAdmin();
+  const mode = String(formData.get("mode") ?? "").trim();
+  if (!["production", "slow", "off"].includes(mode)) return;
+  await prisma.appConfig.upsert({
+    where:  { key: "worker_mode" },
+    create: { label: "Worker Mode", key: "worker_mode", value: mode },
+    update: { value: mode, updatedAt: new Date() },
+  });
+}

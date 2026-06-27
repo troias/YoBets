@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 type AppConfigRow = { id: string; key: string; label: string; value: string; createdAt: Date; updatedAt: Date };
 type ApiKeyRow = { id: string; name: string; key: string; createdAt: Date; lastUsedAt: Date | null };
 import { AppShell } from "@/components/layout/app-shell";
-import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig } from "@/app/actions/api-keys";
+import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig, setWorkerMode } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
 
 const SERVICES = [
@@ -53,7 +53,8 @@ export default async function AdminPage() {
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
   const configMap = new Map<string, AppConfigRow>(appConfigs.map((c: AppConfigRow) => [c.key, c]));
-  const customConfigs: AppConfigRow[] = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key));
+  const customConfigs: AppConfigRow[] = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key) && c.key !== "worker_mode");
+  const workerMode = (configMap.get("worker_mode")?.value ?? "production") as "production" | "slow" | "off";
 
   const statCards = [
     { label: "Active",        value: active },
@@ -117,6 +118,38 @@ export default async function AdminPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Worker Mode */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-3">
+          <div>
+            <h2 className="text-sm font-medium text-zinc-300">Worker Mode</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Controls how often the odds worker polls. Current:{" "}
+              <span className={workerMode === "off" ? "text-red-400" : workerMode === "slow" ? "text-amber-400" : "text-green-400"}>
+                {workerMode === "off" ? "Off (paused)" : workerMode === "slow" ? "Slow / Dev (6× intervals)" : "Production (normal)"}
+              </span>
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {(["production", "slow", "off"] as const).map((m) => {
+              const active = workerMode === m;
+              const label = m === "production" ? "Production" : m === "slow" ? "Slow / Dev" : "Off";
+              const activeClass = m === "off" ? "bg-red-600 text-white" : m === "slow" ? "bg-amber-600 text-white" : "bg-green-600 text-white";
+              return (
+                <form key={m} action={setWorkerMode}>
+                  <input type="hidden" name="mode" value={m} />
+                  <button type="submit"
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${active ? activeClass : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"}`}>
+                    {label}
+                  </button>
+                </form>
+              );
+            })}
+          </div>
+          <p className="text-xs text-zinc-600">
+            Production: 2/5/15/60 min · Slow: 12/30/90 min/6h · Off: pauses for 24h then rechecks
+          </p>
         </div>
 
         {/* App Config */}

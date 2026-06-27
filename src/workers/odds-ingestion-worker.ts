@@ -31,6 +31,14 @@ const worker = new Worker(
   async () => {
     const started = Date.now();
 
+    const mode = await getWorkerMode();
+    if (mode === "off") {
+      const nextMs = 24 * 60 * 60_000;
+      void oddsIngestionQueue.add("scrape:nrl", {}, { delay: nextMs });
+      console.log("[Worker] Mode is OFF — skipping poll, next check in 24h");
+      return { oddsCount: 0, matchCount: 0, durationMs: 0, nextPollMs: nextMs };
+    }
+
     // Fetch from all sources in parallel — individual failures don't block the rest
     const [apiRows, bet365Rows, oddsPortalRows] = await Promise.all([
       oddsApiAdapter.fetch().catch((err) => {
@@ -99,7 +107,20 @@ console.log("[Worker] Odds ingestion worker started");
 //   3–7 days out     → every 60 min (quiet, odds barely move)
 //   No matches       → every 6h     (off-season / bye round)
 
+async function getWorkerMode(): Promise<"production" | "slow" | "off"> {
+  const row = await prisma.appConfig.findUnique({ where: { key: "worker_mode" } });
+  const v = row?.value ?? "production";
+  if (v === "slow" || v === "off") return v;
+  return "production";
+}
+
 async function calcNextPollMs(): Promise<number> {
+  const mode = await getWorkerMode();
+  if (mode === "off") return 24 * 60 * 60_000; // 24h — effectively paused
+
+  // slow = dev mode: 6× all intervals to save API credits
+  const mul = mode === "slow" ? 6 : 1;
+
   const now = new Date();
   const sevenDaysOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -109,14 +130,14 @@ async function calcNextPollMs(): Promise<number> {
     select: { kickoffAt: true },
   });
 
-  if (!next) return 6 * 60 * 60_000; // 6 hours — no matches coming up
+  if (!next) return mul * 6 * 60 * 60_000; // 6h (36h in slow)
 
   const hoursOut = (next.kickoffAt.getTime() - now.getTime()) / 3_600_000;
 
-  if (hoursOut < 3)  return 2  * 60_000;  // 2 min
-  if (hoursOut < 24) return 5  * 60_000;  // 5 min
-  if (hoursOut < 72) return 15 * 60_000;  // 15 min
-  return 60 * 60_000;                      // 60 min
+  if (hoursOut < 3)  return mul * 2  * 60_000;  // 2 min  (12 min in slow)
+  if (hoursOut < 24) return mul * 5  * 60_000;  // 5 min  (30 min in slow)
+  if (hoursOut < 72) return mul * 15 * 60_000;  // 15 min (90 min in slow)
+  return mul * 60 * 60_000;                      // 60 min (6h in slow)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
