@@ -10,6 +10,12 @@ import { sendEmail, sendSms, sendPush, arbAlertHtml, arbAlertSms, steamAlertHtml
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 
 const prisma = new PrismaClient();
+
+type AlertPrefRow = { userId: string; email: string | null; phone: string | null; alertNewArb: boolean; minArbRoi: number | string; alertSteamMove: boolean; steamMoveThreshold: number | string; alertHighEv: boolean; minEvPercent: number | string; alertHotBets: boolean; hotBetsThreshold: number | string };
+type PushSubRow   = { id: string; userId: string; endpoint: string; p256dh: string; auth: string };
+type AlertLogRow  = { id: string; userId: string; alertType: string; key: string; sentAt: Date };
+type MatchAlertRow = { id: string; userId: string; matchId: string; alertType: string; threshold: number | string | null };
+
 const oddsApiAdapter = new TheOddsApiAdapter();
 const bet365Adapter = new Bet365Adapter();
 const oddsPortalAdapter = new OddsPortalAdapter();
@@ -336,11 +342,11 @@ async function pruneOldSnapshots(): Promise<void> {
 // ─── Alerts ──────────────────────────────────────────────────────────────────
 
 async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, number>): Promise<void> {
-  const prefs = await prisma.alertPreferences.findMany({
+  const prefs = (await prisma.alertPreferences.findMany({
     where: {
       OR: [{ alertNewArb: true }, { alertSteamMove: true }, { alertHighEv: true }, { alertHotBets: true }],
     },
-  });
+  })) as unknown as AlertPrefRow[];
   if (prefs.length === 0) return;
 
   // Build current odds map for arb/EV detection
@@ -359,10 +365,10 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
   }
 
   // Load push subscriptions keyed by userId for fast lookup
-  const allPushSubs = await prisma.pushSubscription.findMany({
+  const allPushSubs = (await prisma.pushSubscription.findMany({
     where: { userId: { in: prefs.map(p => p.userId) } },
-  });
-  const pushSubsByUser = new Map<string, typeof allPushSubs>();
+  })) as unknown as PushSubRow[];
+  const pushSubsByUser = new Map<string, PushSubRow[]>();
   for (const sub of allPushSubs) {
     if (!pushSubsByUser.has(sub.userId)) pushSubsByUser.set(sub.userId, []);
     pushSubsByUser.get(sub.userId)!.push(sub);
@@ -376,7 +382,7 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
 
     // Sent-alert dedup keys this run
     const alreadySent = new Set(
-      (await prisma.alertLog.findMany({ where: { userId: pref.userId, sentAt: { gte: new Date(Date.now() - 60 * 60_000) } } }))
+      ((await prisma.alertLog.findMany({ where: { userId: pref.userId, sentAt: { gte: new Date(Date.now() - 60 * 60_000) } } })) as unknown as AlertLogRow[])
         .map(l => `${l.alertType}|${l.key}`)
     );
 
@@ -485,16 +491,18 @@ async function checkAndSendAlerts(rows: NrlOddsRow[], priorPrices: Map<string, n
 // ─── Match-specific alerts ────────────────────────────────────────────────────
 
 async function checkMatchAlerts(rows: NrlOddsRow[], priorPrices: Map<string, number>): Promise<void> {
-  const matchAlerts = await prisma.matchAlert.findMany();
+  const matchAlerts = (await prisma.matchAlert.findMany()) as unknown as MatchAlertRow[];
   if (matchAlerts.length === 0) return;
 
   const userIds = [...new Set(matchAlerts.map(a => a.userId))];
-  const [prefs, allPushSubs] = await Promise.all([
+  const [prefsRaw, pushSubsRaw] = await Promise.all([
     prisma.alertPreferences.findMany({ where: { userId: { in: userIds } } }),
     prisma.pushSubscription.findMany({ where: { userId: { in: userIds } } }),
   ]);
-  const prefMap = new Map(prefs.map(p => [p.userId, p]));
-  const pushSubsByUser = new Map<string, typeof allPushSubs>();
+  const prefs = prefsRaw as unknown as AlertPrefRow[];
+  const allPushSubs = pushSubsRaw as unknown as PushSubRow[];
+  const prefMap = new Map<string, AlertPrefRow>(prefs.map(p => [p.userId, p]));
+  const pushSubsByUser = new Map<string, PushSubRow[]>();
   for (const sub of allPushSubs) {
     if (!pushSubsByUser.has(sub.userId)) pushSubsByUser.set(sub.userId, []);
     pushSubsByUser.get(sub.userId)!.push(sub);
@@ -526,9 +534,9 @@ async function checkMatchAlerts(rows: NrlOddsRow[], priorPrices: Map<string, num
 
     const matchName = `${matchRows[0].homeTeam} vs ${matchRows[0].awayTeam}`;
     const alertType = `match_${alert.alertType}`;
-    const recentLogs = await prisma.alertLog.findMany({
+    const recentLogs = (await prisma.alertLog.findMany({
       where: { userId: alert.userId, alertType, sentAt: { gte: new Date(Date.now() - 60 * 60_000) } },
-    });
+    })) as unknown as AlertLogRow[];
     const alreadySent = new Set(recentLogs.map(l => l.key));
 
     const logAlert = (key: string) =>
