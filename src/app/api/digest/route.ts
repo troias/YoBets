@@ -3,6 +3,8 @@ import prisma from "@/lib/prisma";
 import { sendEmail, sendSms, sendPush } from "@/lib/alerts";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
+type PrefRow = { userId: string; email: string | null; phone: string | null };
+type PushSubRow = { userId: string; endpoint: string; p256dh: string; auth: string };
 
 // Called by a cron job (Railway cron or Vercel cron) once per minute.
 // Only sends to users whose digestTime matches the current hour:minute (AEST).
@@ -22,9 +24,10 @@ export async function POST(req: NextRequest) {
   const currentTime = `${String(aest.getUTCHours()).padStart(2, "0")}:${String(aest.getUTCMinutes()).padStart(2, "0")}`;
 
   // Find users who want a digest at this exact time
-  const prefs = await prisma.alertPreferences.findMany({
+  const prefsRaw = await prisma.alertPreferences.findMany({
     where: { alertDailyDigest: true, digestTime: currentTime },
   });
+  const prefs = prefsRaw as unknown as PrefRow[];
   if (prefs.length === 0) return NextResponse.json({ sent: 0 });
 
   // Find top EV bet from the last 24h of odds data
@@ -85,8 +88,9 @@ export async function POST(req: NextRequest) {
   const sms = `EdgeBoard daily: ${top.matchName} — ${top.outcome} @ ${top.offeredOdds.toFixed(2)} on ${top.bookmaker} (+${top.evPct.toFixed(2)}% EV). edgeboard.com.au/ev`;
 
   const userIds = prefs.map(p => p.userId);
-  const pushSubs = await prisma.pushSubscription.findMany({ where: { userId: { in: userIds } } });
-  const pushByUser = new Map<string, typeof pushSubs>();
+  const pushSubsRaw = await prisma.pushSubscription.findMany({ where: { userId: { in: userIds } } });
+  const pushSubs = pushSubsRaw as unknown as PushSubRow[];
+  const pushByUser = new Map<string, PushSubRow[]>();
   for (const sub of pushSubs) {
     if (!pushByUser.has(sub.userId)) pushByUser.set(sub.userId, []);
     pushByUser.get(sub.userId)!.push(sub);
