@@ -8,6 +8,7 @@ import { ManageBillingButton } from "@/components/billing/manage-billing-button"
 import { CheckoutButton } from "@/components/billing/checkout-button";
 import prisma from "@/lib/prisma";
 import { saveAlertPrefs, addMatchAlert, deleteMatchAlert } from "@/app/actions/alert-prefs";
+import { deletePriceAlert } from "@/app/actions/price-alerts";
 import { PushToggle } from "@/components/push-toggle";
 
 type MatchRow = { id: string; homeTeam: string; awayTeam: string; kickoffAt: Date };
@@ -42,7 +43,7 @@ export default async function SettingsPage() {
 
   if (!user) redirect("/login");
 
-  const [status, sub, alertPrefs, matchAlerts, upcomingMatches] = await Promise.all([
+  const [status, sub, alertPrefs, matchAlerts, upcomingMatches, priceAlerts] = await Promise.all([
     getSubscriptionStatus(user.id),
     prisma.subscription.findUnique({ where: { userId: user.id } }),
     prisma.alertPreferences.findUnique({ where: { userId: user.id } }),
@@ -52,6 +53,11 @@ export default async function SettingsPage() {
       orderBy: { kickoffAt: "asc" },
       take: 20,
       select: { id: true, homeTeam: true, awayTeam: true, kickoffAt: true },
+    }),
+    prisma.priceAlert.findMany({
+      where: { userId: user.id, firedAt: null },
+      include: { match: { select: { homeTeam: true, awayTeam: true, kickoffAt: true } } },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -284,6 +290,46 @@ export default async function SettingsPage() {
                     </div>
                     <form action={deleteAction}>
                       <button type="submit" className="text-xs text-red-400 hover:text-red-300 transition">Remove</button>
+                    </form>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Price Alerts */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-300">Price Alerts</h2>
+            <Link href="/nrl" className="text-xs text-zinc-500 hover:text-zinc-300 transition">
+              Set alerts on NRL page →
+            </Link>
+          </div>
+          {priceAlerts.length === 0 ? (
+            <p className="text-xs text-zinc-600">
+              No active price alerts. On the NRL odds board, click 🔔 next to any outcome to set a target price.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {priceAlerts.map(a => {
+                const deleteAction = async () => { "use server"; await deletePriceAlert(a.id); };
+                const matchName = `${a.match.homeTeam} vs ${a.match.awayTeam}`;
+                const kickoff = a.match.kickoffAt.toLocaleDateString("en-AU", {
+                  timeZone: "Australia/Sydney", weekday: "short", day: "numeric", month: "short",
+                });
+                return (
+                  <div key={a.id} className="flex items-center justify-between gap-4 rounded-lg bg-zinc-900/60 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm text-zinc-200 truncate">{matchName}</p>
+                      <p className="text-xs text-zinc-500">
+                        {a.outcome === "home" ? a.match.homeTeam : a.match.awayTeam} hits ${Number(a.targetPrice).toFixed(2)} · {kickoff}
+                      </p>
+                    </div>
+                    <form action={deleteAction}>
+                      <button type="submit" className="shrink-0 text-xs text-red-400 hover:text-red-300 transition">
+                        Remove
+                      </button>
                     </form>
                   </div>
                 );

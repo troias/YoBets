@@ -6,6 +6,10 @@ import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 import { PaywallGate } from "@/components/paywall-gate";
 import { ArbPushNudge } from "@/components/arb-push-nudge";
+import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import Link from "next/link";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://edgeboard.com.au";
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet",
@@ -190,7 +194,22 @@ export default async function ArbitragePage({
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
 
+  const subStatus = user ? await getSubscriptionStatus(user.id) : null;
+  const subscribed = subStatus ? isSubscribed(subStatus) : false;
+
   const now = new Date();
+
+  // FOMO: count significant price moves since last visit
+  const lastVisitRaw = cookieStore.get("last_visit")?.value;
+  const lastVisit = lastVisitRaw ? new Date(lastVisitRaw) : null;
+  const lastVisitValid = lastVisit && !isNaN(lastVisit.getTime()) &&
+    lastVisit < now && (now.getTime() - lastVisit.getTime()) < 24 * 3_600_000;
+  const movesSinceVisit = lastVisitValid
+    ? await prisma.oddsSnapshot.count({
+        where: { recordedAt: { gt: lastVisit! }, marketType: "h2h", bookmaker: { notIn: ["bet365"] } },
+      })
+    : 0;
+
   const { gte, lte } = aestDateRange(date, now);
 
   const [matches, lastArbsConfig] = await Promise.all([
@@ -314,14 +333,37 @@ export default async function ArbitragePage({
           </div>
         </div>
 
+        {!subscribed && lastVisitValid && movesSinceVisit > 10 && (
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+            <p className="text-xs text-zinc-400">
+              <span className="font-semibold text-zinc-200">{movesSinceVisit} price updates</span> happened since your last visit.
+              Pro users were notified in real time.
+            </p>
+            <Link href="/pricing" className="shrink-0 ml-4 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+              Get alerts →
+            </Link>
+          </div>
+        )}
+
         {filtered.length > 0 && <ArbPushNudge />}
 
         {filtered.length === 0 ? (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-10 text-center">
-            <p className="text-sm font-medium text-zinc-300">No arbitrage opportunities right now</p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Arbs appear when bookmakers disagree enough to guarantee profit. Check back during match windows.
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-10 text-center space-y-3">
+            <p className="text-sm font-medium text-zinc-300">No live arbs right now</p>
+            <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+              Arbs appear when books disagree enough to cover both sides. They&apos;re rare — and they close in 10–20 minutes when they do appear.
             </p>
+            {!subscribed && (
+              <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-5 py-4 max-w-sm mx-auto">
+                <p className="text-xs font-medium text-amber-300">Don&apos;t miss the next one</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Pro sends a push notification to your phone the instant an arb opens. By the time you check manually, it&apos;s usually gone.
+                </p>
+                <Link href="/pricing" className="mt-3 inline-block rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition">
+                  Start free trial →
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -342,13 +384,24 @@ export default async function ArbitragePage({
                       <div className="font-medium">{arb.matchName}</div>
                       <div className="mt-0.5 text-xs text-zinc-500">{kickoff} AEST</div>
                     </div>
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-sm font-bold text-amber-400">
-                        +{arb.roiPercent.toFixed(2)}%
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        ${arb.guaranteedReturn.toFixed(2)} return on $100
-                      </span>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Found a +${arb.roiPercent.toFixed(2)}% guaranteed NRL arb on EdgeBoard — bet both sides and profit regardless of the result`)}&url=${encodeURIComponent(`${SITE_URL}/arbitrage`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-zinc-700 hover:text-zinc-400 transition"
+                        title="Share on X"
+                      >
+                        Share 𝕏
+                      </a>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-sm font-bold text-amber-400">
+                          +{arb.roiPercent.toFixed(2)}%
+                        </span>
+                        <span className="text-xs text-zinc-500">
+                          ${arb.guaranteedReturn.toFixed(2)} return on $100
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="divide-y divide-zinc-800/50">

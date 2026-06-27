@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
+import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import Link from "next/link";
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet", tab: "TAB", bet365: "Bet365", ladbrokes: "Ladbrokes",
@@ -42,6 +44,9 @@ export default async function LineMovementPage({
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
+
+  const subStatus = user ? await getSubscriptionStatus(user.id) : null;
+  const subscribed = subStatus ? isSubscribed(subStatus) : false;
 
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowHours * 60 * 60_000);
@@ -300,6 +305,22 @@ export default async function LineMovementPage({
           )}
         </section>
 
+        {!subscribed && (
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/90 px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Get alerted when lines move like this</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Sharp money moves fast. Pro sends a push or SMS the moment a steam move hits — before the rest of the market catches up.
+              </p>
+            </div>
+            <Link
+              href="/pricing"
+              className="shrink-0 rounded-lg bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700 ml-4"
+            >
+              See Pro →
+            </Link>
+          </div>
+        )}
       </div>
       </PaywallGate>
     </AppShell>

@@ -44,6 +44,14 @@ export async function POST(request: NextRequest) {
         metadata: { supabaseUserId: user.id },
       },
       allow_promotion_codes: true,
+      custom_text: {
+        submit: {
+          message: "7-day free trial — you won't be charged until your trial ends. Cancel anytime from settings.",
+        },
+        after_submit: {
+          message: "You'll get browser push alerts, email, and SMS the instant an arb opens. Arb windows close in minutes — Pro users catch them.",
+        },
+      },
       success_url: `${siteUrl}/nrl?checkout=success`,
       cancel_url: `${siteUrl}/pricing`,
     });

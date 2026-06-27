@@ -25,7 +25,7 @@ export async function PaywallGate({
         <div className="min-w-0">
           <p className="text-sm font-medium text-zinc-200">Free plan</p>
           <p className="text-xs text-zinc-500">
-            Go Pro for live 30-second polling, push alerts, and priority access · $19 AUD/month
+            Upgrade for push, email & SMS alerts when +EV bets appear, lines move sharply, or an arb opens · $19/month
           </p>
         </div>
         <div className="shrink-0">

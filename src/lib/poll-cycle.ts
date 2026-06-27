@@ -428,6 +428,77 @@ async function checkMatchAlerts(rows: NrlOddsRow[], priorPrices: Map<string, num
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
+async function checkPriceAlerts(rows: NrlOddsRow[]): Promise<void> {
+  const alerts = await prisma.priceAlert.findMany({ where: { firedAt: null } });
+  if (!alerts.length) return;
+
+  const pushSubs = (await prisma.pushSubscription.findMany()) as unknown as PushSubRow[];
+  const subsByUser = new Map<string, PushSubRow[]>();
+  for (const s of pushSubs) {
+    const arr = subsByUser.get(s.userId) ?? [];
+    arr.push(s);
+    subsByUser.set(s.userId, arr);
+  }
+
+  const prefs = (await prisma.alertPreferences.findMany()) as unknown as AlertPrefRow[];
+  const prefByUser = new Map(prefs.map(p => [p.userId, p]));
+
+  for (const alert of alerts) {
+    // Find best current price for this match + outcome across all bookmakers
+    const matchRows = rows.filter(r =>
+      r.outcome === alert.outcome &&
+      r.marketType === "h2h" &&
+      (!alert.bookmaker || r.bookmaker === alert.bookmaker)
+    );
+
+    // We need to find rows that belong to this matchId — use the matchIdCache via DB lookup
+    const match = await prisma.match.findUnique({
+      where: { id: alert.matchId },
+      select: { homeTeam: true, awayTeam: true },
+    });
+    if (!match) continue;
+
+    const matchName = `${match.homeTeam} vs ${match.awayTeam}`;
+
+    // Match rows by team name since rows use external IDs
+    const relevantRows = matchRows.filter(r =>
+      r.homeTeam === match.homeTeam || r.awayTeam === match.awayTeam
+    );
+
+    const bestPrice = relevantRows.length
+      ? Math.max(...relevantRows.map(r => r.price))
+      : null;
+
+    if (bestPrice === null || bestPrice < Number(alert.targetPrice)) continue;
+
+    const bestRow = relevantRows.find(r => r.price === bestPrice);
+
+    // Fire the alert
+    await prisma.priceAlert.update({
+      where: { id: alert.id },
+      data: { firedAt: new Date() },
+    });
+
+    const title = `Price alert: ${alert.outcome === "home" ? match.homeTeam : match.awayTeam}`;
+    const body  = `${matchName} hit $${bestPrice.toFixed(2)} at ${bestRow?.bookmaker ?? "a bookmaker"} — your target was $${Number(alert.targetPrice).toFixed(2)}`;
+    const url   = "/nrl";
+
+    const userSubs = subsByUser.get(alert.userId) ?? [];
+    if (userSubs.length) {
+      await sendPush(userSubs, title, body, url).catch(() => {});
+    }
+
+    const pref = prefByUser.get(alert.userId);
+    if (pref?.email) {
+      const html = `<h2 style="color:#f59e0b">${title}</h2><p>${body}</p><p><a href="https://edgeboard.com.au/nrl">View on EdgeBoard →</a></p>`;
+      await sendEmail(pref.email, title, html).catch(() => {});
+    }
+    if (pref?.phone) {
+      await sendSms(pref.phone, `EdgeBoard: ${body}`).catch(() => {});
+    }
+  }
+}
+
 async function saveArbSnapshot(): Promise<void> {
   const now = new Date();
   const sevenDaysOut = new Date(now.getTime() + 7 * 86_400_000);
@@ -485,6 +556,7 @@ export async function runPollCycle(): Promise<{ oddsCount: number; matchCount: n
     void pruneOldSnapshots().catch(() => {});
     void checkAndSendAlerts(rows, priorPrices).catch(e => console.warn("[Poll] Alert check failed:", e.message));
     void checkMatchAlerts(rows, priorPrices).catch(e => console.warn("[Poll] Match alert check failed:", e.message));
+    void checkPriceAlerts(rows).catch(e => console.warn("[Poll] Price alert check failed:", e.message));
     void saveArbSnapshot().catch(e => console.warn("[Poll] Arb snapshot failed:", e.message));
   } else {
     console.warn("[Poll] No odds rows returned from any source");

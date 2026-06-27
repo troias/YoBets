@@ -65,6 +65,7 @@ model Match {
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
   odds          Odds[]
   snapshots     OddsSnapshot[]
+  priceAlerts   PriceAlert[]
 
   @@map("matches")
 }
@@ -180,6 +181,22 @@ model MatchAlert {
   @@index([userId])
   @@index([matchId])
   @@map("match_alerts")
+}
+
+model PriceAlert {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  matchId     String    @map("match_id") @db.Uuid
+  outcome     String
+  targetPrice Decimal   @map("target_price") @db.Decimal(6, 2)
+  bookmaker   String?
+  firedAt     DateTime? @map("fired_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([matchId])
+  @@map("price_alerts")
 }
 
 model AppConfig {

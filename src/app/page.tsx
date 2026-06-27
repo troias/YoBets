@@ -127,16 +127,16 @@ export default async function HomePage() {
             href={user ? "/nrl" : "/register"}
             className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-black transition hover:bg-zinc-200"
           >
-            Start 7-Day Free Trial
+            {user ? "Open Dashboard" : "Start for free — no card needed"}
           </Link>
           <Link
             href="/pricing"
             className="rounded-xl border border-zinc-700 px-8 py-3.5 text-base text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100"
           >
-            See pricing →
+            See what Pro adds →
           </Link>
         </div>
-        <p className="mt-4 text-xs text-zinc-600">No credit card required during trial · Cancel anytime</p>
+        <p className="mt-4 text-xs text-zinc-600">Free forever · Upgrade anytime for instant alerts</p>
       </section>
 
       {/* Stats bar */}
@@ -308,58 +308,82 @@ export default async function HomePage() {
 
       {/* Pricing */}
       <section className="border-t border-zinc-800 bg-zinc-950/40">
-        <div className="mx-auto max-w-3xl px-6 py-20">
-          <h2 className="mb-2 text-center text-2xl font-semibold">Simple pricing</h2>
+        <div className="mx-auto max-w-4xl px-6 py-20">
+          <h2 className="mb-2 text-center text-2xl font-semibold">Start free. Upgrade when you&apos;re ready.</h2>
           <p className="mb-12 text-center text-sm text-zinc-500">
-            One plan. Everything included. 7-day free trial.
+            The full product is free. Pro adds instant alerts when arbs open.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
-            {[
-              {
-                period: "Monthly",
-                price: "$12",
-                unit: "AUD / month",
-                note: "Billed monthly",
-                annual: false,
-              },
-              {
-                period: "Annual",
-                price: "$99",
-                unit: "AUD / year",
-                note: "$8.25/month · Save 31%",
-                annual: true,
-              },
-            ].map(({ period, price, unit, note, annual }) => (
-              <div
-                key={period}
-                className={`relative rounded-2xl border p-6 ${
-                  annual ? "border-zinc-600 bg-zinc-950/90" : "border-zinc-800 bg-zinc-950/90"
-                }`}
-              >
-                {annual && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-500/10 px-3 py-0.5 text-xs font-medium text-green-400">
-                    Best value
-                  </div>
-                )}
-                <div className="text-sm text-zinc-500">{period}</div>
-                <div className="mt-2 flex items-end gap-1.5">
-                  <span className="text-4xl font-bold">{price}</span>
-                  <span className="mb-1 text-sm text-zinc-400">{unit}</span>
-                </div>
-                <p className="mt-0.5 text-xs text-zinc-600">{note}</p>
-                <div className="mt-6">
-                  <Link
-                    href={user ? "/pricing" : "/register"}
-                    className="block w-full rounded-xl bg-white py-2.5 text-center text-sm font-semibold text-black transition hover:bg-zinc-200"
-                  >
-                    Start 7-Day Free Trial
-                  </Link>
-                </div>
+
+            {/* Free */}
+            <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950/90 p-6">
+              <div className="text-sm font-medium text-zinc-400">Free</div>
+              <div className="mt-2 flex items-end gap-1.5">
+                <span className="text-4xl font-bold">$0</span>
+                <span className="mb-1 text-sm text-zinc-500">forever</span>
               </div>
-            ))}
+              <p className="mt-0.5 text-xs text-zinc-600">No credit card required</p>
+              <ul className="mt-6 flex-1 space-y-2.5">
+                {[
+                  "Odds board — 11 bookmakers side by side",
+                  "Arb finder — guaranteed profit opportunities",
+                  "EV finder — fair pricing + Kelly stake calculator",
+                  "Line movement — 1h to 48h windows",
+                  "Market Brief — daily digest of best plays",
+                  "Live markets — matches kicking off soon",
+                ].map(f => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-zinc-400">
+                    <span className="mt-0.5 shrink-0 text-zinc-500">✓</span>{f}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6">
+                <Link
+                  href={user ? "/nrl" : "/register"}
+                  className="block w-full rounded-xl border border-zinc-700 py-2.5 text-center text-sm font-medium text-zinc-200 transition hover:border-zinc-500 hover:text-white"
+                >
+                  {user ? "Go to dashboard" : "Sign up free →"}
+                </Link>
+              </div>
+            </div>
+
+            {/* Pro */}
+            <div className="relative flex flex-col rounded-2xl border border-amber-500/40 bg-zinc-950/90 p-6">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-semibold text-amber-400">
+                7-day free trial
+              </div>
+              <div className="text-sm font-medium text-amber-400">Pro</div>
+              <div className="mt-2 flex items-end gap-1.5">
+                <span className="text-4xl font-bold">$19</span>
+                <span className="mb-1 text-sm text-zinc-400">AUD / month</span>
+              </div>
+              <p className="mt-0.5 text-xs text-zinc-600">or $99/year · Save 56% · Cancel anytime</p>
+              <ul className="mt-6 flex-1 space-y-2.5">
+                {[
+                  "Everything in Free",
+                  "Polls every 2 min when a match is <3h away",
+                  "Browser push alerts the instant an arb opens",
+                  "Email alerts for arbs and steam moves",
+                  "SMS alerts (configure in settings)",
+                ].map(f => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
+                    <span className="mt-0.5 shrink-0 text-amber-500">✓</span>{f}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6">
+                <Link
+                  href={user ? "/pricing" : "/register"}
+                  className="block w-full rounded-xl bg-amber-500 py-2.5 text-center text-sm font-semibold text-black transition hover:bg-amber-400"
+                >
+                  Start free trial →
+                </Link>
+              </div>
+            </div>
+
           </div>
           <p className="mt-6 text-center text-xs text-zinc-600">
-            All prices in AUD · GST included · Cancel anytime from your settings
+            All prices in AUD · Cancel anytime from your settings
           </p>
         </div>
       </section>
@@ -384,15 +408,20 @@ export default async function HomePage() {
             Your next NRL bet should be at the best price.
           </h2>
           <p className="mt-3 text-zinc-400">
-            Start your free trial. No credit card required.
+            Free to use. No credit card. Takes 30 seconds.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col items-center gap-3">
             <Link
               href={user ? "/nrl" : "/register"}
               className="inline-block rounded-xl bg-white px-10 py-4 text-base font-semibold text-black transition hover:bg-zinc-200"
             >
-              {user ? "Open Dashboard" : "Start 7-Day Free Trial"}
+              {user ? "Open Dashboard" : "Sign up free →"}
             </Link>
+            {!user && (
+              <Link href="/pricing" className="text-sm text-zinc-600 hover:text-zinc-400 transition">
+                See Pro features
+              </Link>
+            )}
           </div>
         </div>
       </section>

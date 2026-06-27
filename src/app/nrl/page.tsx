@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 import { NextPollCountdown } from "@/components/next-poll-countdown";
+import { PriceAlertButton } from "@/components/price-alert-button";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null; updatedAt: Date };
 type SnapRow  = { matchId: string; bookmaker: string; outcome: string | null; price: number | string };
@@ -171,6 +172,15 @@ export default async function NRLPage({
     const key = `${s.matchId}|${s.bookmaker}|${s.outcome}`;
     if (!prevPriceMap.has(key)) prevPriceMap.set(key, Number(s.price));
   }
+
+  // Price alerts set by this user — show bell state in the table
+  const userAlerts = user
+    ? await prisma.priceAlert.findMany({
+        where: { userId: user.id, firedAt: null, matchId: { in: matchIds } },
+        select: { id: true, matchId: true, outcome: true, targetPrice: true },
+      })
+    : [];
+  const alertMap = new Map(userAlerts.map(a => [`${a.matchId}|${a.outcome}`, a]));
 
   // Next poll scheduled time — written by the worker after each cycle
   const nextPollConfig = await prisma.appConfig.findUnique({ where: { key: "next_poll_at" } });
@@ -348,7 +358,22 @@ export default async function NRLPage({
                           const best = bestByOutcome[outcome];
                           return (
                             <tr key={outcome} className="border-b border-zinc-800/40 last:border-0">
-                              <td className="px-4 py-2.5 text-xs text-zinc-400 whitespace-nowrap">{label}</td>
+                              <td className="px-4 py-2.5 text-xs text-zinc-400 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  {label}
+                                  {user && market === "h2h" && (
+                                    <PriceAlertButton
+                                      matchId={match.id}
+                                      matchName={`${match.homeTeam} vs ${match.awayTeam}`}
+                                      outcome={outcome}
+                                      teamName={teamForOutcome[outcome]}
+                                      currentBestPrice={best > 0 ? best : 2}
+                                      existingAlertId={alertMap.get(`${match.id}|${outcome}`)?.id}
+                                      existingTargetPrice={Number(alertMap.get(`${match.id}|${outcome}`)?.targetPrice)}
+                                    />
+                                  )}
+                                </div>
+                              </td>
                               {bookmakers.map(bm => {
                                 const odd = rows.find(o => o.bookmaker === bm);
                                 const price = odd ? Number(odd.price) : null;

@@ -5,6 +5,10 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 import { BankrollInput } from "@/components/bankroll-input";
+import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import Link from "next/link";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://edgeboard.com.au";
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet",
@@ -188,9 +192,24 @@ export default async function EVPage({
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
 
+  const subStatus = user ? await getSubscriptionStatus(user.id) : null;
+  const subscribed = subStatus ? isSubscribed(subStatus) : false;
+
   const bankroll = Math.max(0, Number(cookieStore.get("bankroll")?.value ?? 0));
 
   const now = new Date();
+
+  // FOMO: count price moves since last visit
+  const lastVisitRaw = cookieStore.get("last_visit")?.value;
+  const lastVisit = lastVisitRaw ? new Date(lastVisitRaw) : null;
+  const lastVisitValid = lastVisit && !isNaN(lastVisit.getTime()) &&
+    lastVisit < now && (now.getTime() - lastVisit.getTime()) < 24 * 3_600_000;
+  const movesSinceVisit = lastVisitValid
+    ? await prisma.oddsSnapshot.count({
+        where: { recordedAt: { gt: lastVisit! }, marketType: "h2h", bookmaker: { notIn: ["bet365"] } },
+      })
+    : 0;
+
   const { gte, lte } = aestDateRange(date, now);
 
   const matches = await prisma.match.findMany({
@@ -272,6 +291,17 @@ export default async function EVPage({
           </div>
           <BankrollInput initialValue={bankroll} />
         </div>
+
+        {!subscribed && lastVisitValid && movesSinceVisit > 10 && (
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+            <p className="text-xs text-zinc-400">
+              <span className="font-semibold text-zinc-200">{movesSinceVisit} price updates</span> happened since your last visit — some of those EV windows are already gone.
+            </p>
+            <Link href="/pricing" className="shrink-0 ml-4 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 transition">
+              Get alerts →
+            </Link>
+          </div>
+        )}
 
         {/* Kelly explainer */}
         <details className="group rounded-xl border border-zinc-800 bg-zinc-950/90">
@@ -394,14 +424,25 @@ export default async function EVPage({
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <a
-                          href={`/api/bet?bm=${row.bookmaker}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:bg-amber-500/20 hover:text-amber-300"
-                        >
-                          Bet →
-                        </a>
+                        <div className="flex items-center justify-end gap-2">
+                          <a
+                            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`+${row.evPercent.toFixed(1)}% EV on ${row.outcome} at ${BOOKMAKER_LABEL[row.bookmaker] ?? row.bookmaker} — found via EdgeBoard NRL odds tool`)}&url=${encodeURIComponent(`${SITE_URL}/ev`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-zinc-700 hover:text-zinc-400 transition"
+                            title="Share on X"
+                          >
+                            𝕏
+                          </a>
+                          <a
+                            href={`/api/bet?bm=${row.bookmaker}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:bg-amber-500/20 hover:text-amber-300"
+                          >
+                            Bet →
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -409,6 +450,23 @@ export default async function EVPage({
               </tbody>
             </table>
             </div>
+          </div>
+        )}
+
+        {!subscribed && evRows.length > 0 && (
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/90 px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-zinc-200">These prices won&apos;t last</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                +EV windows close when other punters or books adjust. Pro sends a push notification the moment a new one appears.
+              </p>
+            </div>
+            <Link
+              href="/pricing"
+              className="shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-black transition hover:bg-amber-400 ml-4"
+            >
+              Get alerts →
+            </Link>
           </div>
         )}
       </div>

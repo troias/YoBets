@@ -1,16 +1,28 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
 import { CheckoutButton } from "@/components/billing/checkout-button";
 
-const FEATURES = [
-  "Live NRL odds across 11 Australian bookmakers",
-  "H2H, Line, and Total markets",
-  "Arb finder with exact stake splits",
-  "EV finder with no-vig consensus line",
-  "Best odds highlighted with direct bet links",
-  "Updates every 2 minutes",
+const PRODUCT_IDS = ["prod_UmPgHfxCcttzyp", "prod_UmPzL1Ez263ESU"];
+
+const FREE_FEATURES = [
+  "NRL odds board — 11 bookmakers side by side",
+  "Arb finder — guaranteed profit when books disagree",
+  "EV finder — no-vig fair pricing + Kelly stake calculator",
+  "Line movement tracker — 1h to 48h windows",
+  "Market Brief — daily digest of best plays",
+  "Live markets — kicking off within 2 hours",
+];
+
+const PRO_FEATURES = [
+  "Everything in Free",
+  "Polls every 2 min when a match is <3 hours away",
+  "Browser push alerts the instant an arb opens",
+  "Email alerts for arbs and steam moves",
+  "SMS alerts (configure in settings)",
+  "7-day free trial — cancel anytime",
 ];
 
 export default async function PricingPage() {
@@ -21,79 +33,97 @@ export default async function PricingPage() {
   const status = user ? await getSubscriptionStatus(user.id) : null;
   const subscribed = status ? isSubscribed(status) : false;
 
-  const monthlyPriceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "";
-  const annualPriceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ANNUAL ?? "";
+  // Fetch prices live from Stripe product — no hardcoded price IDs needed
+  let monthlyPriceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "";
+  let annualPriceId  = process.env.NEXT_PUBLIC_STRIPE_PRICE_ANNUAL  ?? "";
+  let monthlyAmount  = 19;
+  let annualAmount   = 99;
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (stripeKey) {
+    try {
+      const stripe = new Stripe(stripeKey);
+      for (const productId of PRODUCT_IDS) {
+        const prices = await stripe.prices.list({ product: productId, active: true });
+        for (const price of prices.data) {
+          const interval = price.recurring?.interval;
+          const amount   = (price.unit_amount ?? 0) / 100;
+          if (interval === "month") { monthlyPriceId = price.id; monthlyAmount = amount; }
+          if (interval === "year")  { annualPriceId  = price.id; annualAmount  = amount; }
+        }
+      }
+    } catch { /* Stripe not configured yet — fall back to env vars */ }
+  }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-10 px-6 py-16">
+    <div className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-10 px-6 py-16">
       <div className="text-center">
         <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-300 transition">
           ← EdgeBoard
         </Link>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">
-          Simple, transparent pricing
+          Find an edge. Keep your winnings.
         </h1>
-        <p className="mt-2 text-zinc-400">
-          One plan. Full access. Cancel anytime.
+        <p className="mt-2 text-zinc-400 max-w-md mx-auto">
+          EdgeBoard compares NRL odds across 11 Australian bookmakers in real time — finding arbs, value bets, and line moves before you place a bet.
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* Monthly */}
-        <div className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/90 p-6">
-          <div className="text-sm text-zinc-500">Monthly</div>
-          <div className="mt-2 flex items-end gap-1">
-            <span className="text-4xl font-bold">$12</span>
-            <span className="mb-1 text-zinc-400">AUD / month</span>
-          </div>
-          <p className="mt-1 text-xs text-zinc-600">Billed monthly · Cancel anytime</p>
 
-          <ul className="mt-6 flex-1 space-y-2">
-            {FEATURES.map((f) => (
+        {/* Free */}
+        <div className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/90 p-6">
+          <div className="text-sm font-medium text-zinc-400">Free</div>
+          <div className="mt-2 flex items-end gap-1">
+            <span className="text-4xl font-bold">$0</span>
+            <span className="mb-1 text-zinc-500">forever</span>
+          </div>
+          <p className="mt-1 text-xs text-zinc-600">No credit card required</p>
+
+          <ul className="mt-6 flex-1 space-y-2.5">
+            {FREE_FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="mt-0.5 text-green-500">✓</span>
+                <span className="mt-0.5 shrink-0 text-zinc-500">✓</span>
                 {f}
               </li>
             ))}
           </ul>
 
           <div className="mt-6">
-            {subscribed ? (
+            {user ? (
               <Link
-                href="/settings"
+                href="/dashboard"
                 className="block w-full rounded-lg bg-zinc-800 py-2.5 text-center text-sm text-zinc-300 transition hover:bg-zinc-700"
               >
-                Manage subscription
+                Go to dashboard
               </Link>
-            ) : user ? (
-              <CheckoutButton priceId={monthlyPriceId} />
             ) : (
               <Link
                 href="/register"
-                className="block w-full rounded-lg bg-white py-2.5 text-center text-sm font-medium text-black transition hover:bg-zinc-200"
+                className="block w-full rounded-lg bg-zinc-800 py-2.5 text-center text-sm font-medium text-zinc-200 transition hover:bg-zinc-700"
               >
-                Start 7-Day Free Trial
+                Sign up free
               </Link>
             )}
           </div>
         </div>
 
-        {/* Annual */}
-        <div className="relative flex flex-col rounded-xl border border-zinc-700 bg-zinc-950/90 p-6">
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-500/10 px-3 py-0.5 text-xs font-medium text-green-400">
-            Save 31%
+        {/* Pro */}
+        <div className="relative flex flex-col rounded-xl border border-amber-500/40 bg-zinc-950/90 p-6">
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500/15 px-3 py-0.5 text-xs font-semibold text-amber-400">
+            Pro — 7-day free trial
           </div>
-          <div className="text-sm text-zinc-500">Annual</div>
+          <div className="text-sm font-medium text-amber-400">Pro</div>
           <div className="mt-2 flex items-end gap-1">
-            <span className="text-4xl font-bold">$99</span>
-            <span className="mb-1 text-zinc-400">AUD / year</span>
+            <span className="text-4xl font-bold">${monthlyAmount > 0 ? monthlyAmount : 19}</span>
+            <span className="mb-1 text-zinc-400">AUD / month</span>
           </div>
-          <p className="mt-1 text-xs text-zinc-600">$8.25/month · Billed annually</p>
+          <p className="mt-1 text-xs text-zinc-600">or ${annualAmount > 0 ? annualAmount : 99}/year · Cancel anytime</p>
 
-          <ul className="mt-6 flex-1 space-y-2">
-            {FEATURES.map((f) => (
+          <ul className="mt-6 flex-1 space-y-2.5">
+            {PRO_FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="mt-0.5 text-green-500">✓</span>
+                <span className="mt-0.5 shrink-0 text-amber-500">✓</span>
                 {f}
               </li>
             ))}
@@ -108,22 +138,44 @@ export default async function PricingPage() {
                 Manage subscription
               </Link>
             ) : user ? (
-              <CheckoutButton priceId={annualPriceId} label="Start 7-Day Free Trial" variant="default" />
+              <CheckoutButton priceId={monthlyPriceId} label="Start free trial →" variant="default" />
             ) : (
               <Link
                 href="/register"
-                className="block w-full rounded-lg bg-white py-2.5 text-center text-sm font-medium text-black transition hover:bg-zinc-200"
+                className="block w-full rounded-lg bg-amber-500 py-2.5 text-center text-sm font-semibold text-black transition hover:bg-amber-400"
               >
-                Start 7-Day Free Trial
+                Start free trial →
               </Link>
             )}
           </div>
         </div>
       </div>
 
-      <p className="text-center text-xs text-zinc-600">
-        All prices in Australian dollars (AUD) · GST included · 7-day free trial on all plans
-      </p>
+      {/* Annual upsell */}
+      {!subscribed && (
+        <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/90 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-zinc-200">Annual plan — ${annualAmount > 0 ? annualAmount : 99} AUD / year</p>
+            <p className="text-xs text-zinc-500 mt-0.5">${annualAmount > 0 ? (annualAmount / 12).toFixed(2) : "8.25"}/month · Same features · Save ${annualAmount > 0 ? ((monthlyAmount * 12) - annualAmount).toFixed(0) : "129"} vs monthly</p>
+          </div>
+          {user ? (
+            <CheckoutButton priceId={annualPriceId} label="Get annual →" variant="secondary" />
+          ) : (
+            <Link href="/register" className="shrink-0 rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700">
+              Get annual →
+            </Link>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-3 text-center">
+        <p className="text-xs text-zinc-600">
+          All prices in Australian dollars (AUD) · GST included · Billed via Stripe · Cancel anytime from settings
+        </p>
+        <p className="text-xs text-zinc-700">
+          Arb windows close in minutes. Pro users get notified the second one opens.
+        </p>
+      </div>
     </div>
   );
 }
