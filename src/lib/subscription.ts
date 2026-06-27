@@ -20,3 +20,7 @@ export async function getSubscriptionStatus(userId: string): Promise<SubStatus> 
 export function isSubscribed(status: SubStatus): boolean {
   return status === "active" || status === "trialing";
 }
+
+export function isProOrAdmin(status: SubStatus | null, email: string | undefined | null): boolean {
+  return isAdminEmail(email) || (status !== null && isSubscribed(status));
+}

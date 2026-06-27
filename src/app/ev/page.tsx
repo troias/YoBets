@@ -7,7 +7,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
 import { BankrollInput } from "@/components/bankroll-input";
-import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import { getSubscriptionStatus, isProOrAdmin } from "@/lib/subscription";
 import Link from "next/link";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://edgeboard.com.au";
@@ -199,7 +199,7 @@ export default async function EVPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   const subStatus = user ? await getSubscriptionStatus(user.id) : null;
-  const subscribed = subStatus ? isSubscribed(subStatus) : false;
+  const subscribed = isProOrAdmin(subStatus, user?.email);
 
   const bankroll = Math.max(0, Number(cookieStore.get("bankroll")?.value ?? 0));
 

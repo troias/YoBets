@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
-import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import { getSubscriptionStatus, isProOrAdmin } from "@/lib/subscription";
 import Link from "next/link";
 
 const BOOKMAKER_LABEL: Record<string, string> = {
@@ -52,7 +52,7 @@ export default async function LineMovementPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   const subStatus = user ? await getSubscriptionStatus(user.id) : null;
-  const subscribed = subStatus ? isSubscribed(subStatus) : false;
+  const subscribed = isProOrAdmin(subStatus, user?.email);
 
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowHours * 60 * 60_000);

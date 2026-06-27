@@ -6,7 +6,7 @@ import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
 import { PaywallGate } from "@/components/paywall-gate";
 import { ArbPushNudge } from "@/components/arb-push-nudge";
-import { getSubscriptionStatus, isSubscribed } from "@/lib/subscription";
+import { getSubscriptionStatus, isProOrAdmin } from "@/lib/subscription";
 import { KickoffCountdown } from "@/components/kickoff-countdown";
 import Link from "next/link";
 
@@ -202,7 +202,7 @@ export default async function ArbitragePage({
   catch { /* ignore */ }
 
   const subStatus = user ? await getSubscriptionStatus(user.id) : null;
-  const subscribed = subStatus ? isSubscribed(subStatus) : false;
+  const subscribed = isProOrAdmin(subStatus, user?.email);
 
   const now = new Date();
 
