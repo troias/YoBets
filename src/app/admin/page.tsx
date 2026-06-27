@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import type { AppConfig } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+
+type AppConfigRow = Awaited<ReturnType<typeof prisma.appConfig.findMany>>[number];
 import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
@@ -50,8 +51,8 @@ export default async function AdminPage() {
   const mrr = priceMonthly > 0 ? active * priceMonthly : null;
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
-  const configMap = new Map(appConfigs.map((c: AppConfig) => [c.key, c]));
-  const customConfigs = appConfigs.filter((c: AppConfig) => !KNOWN_KEYS.has(c.key));
+  const configMap = new Map(appConfigs.map((c: AppConfigRow) => [c.key, c]));
+  const customConfigs = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key));
 
   const statCards = [
     { label: "Active",        value: active },
