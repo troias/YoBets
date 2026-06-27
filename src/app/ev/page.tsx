@@ -192,7 +192,7 @@ export default async function EVPage({
 
   const matches = await prisma.match.findMany({
     where: { kickoffAt: { gte, lte } },
-    include: { odds: { where: { marketType: market } } },
+    include: { odds: { where: { marketType: market, bookmaker: { notIn: ["bet365"] } } } },
     orderBy: { kickoffAt: "asc" },
   });
 
@@ -270,7 +270,7 @@ export default async function EVPage({
         </div>
 
         <p className="text-xs text-zinc-600">
-          Boosted/promo prices (Betbooster, Odds Boost, Power Play) are excluded from the fair odds model.
+          Boosted/promo prices and Bet365 (stale scraped data) are excluded from the fair odds model.
         </p>
 
         {evRows.length === 0 ? (

@@ -186,7 +186,7 @@ export default async function ArbitragePage({
 
   const matches = await prisma.match.findMany({
     where: { kickoffAt: { gte, lte } },
-    include: { odds: { where: { marketType: market } } },
+    include: { odds: { where: { marketType: market, bookmaker: { notIn: ["bet365"] } } } },
     orderBy: { kickoffAt: "asc" },
   });
 

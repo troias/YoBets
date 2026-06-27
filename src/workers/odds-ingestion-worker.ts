@@ -55,6 +55,8 @@ const worker = new Worker(
     if (mode === "off") {
       const nextMs = 24 * 60 * 60_000;
       void oddsIngestionQueue.add("scrape:nrl", {}, { delay: nextMs });
+      const nextPollAt = new Date(Date.now() + nextMs).toISOString();
+      await prisma.appConfig.upsert({ where: { key: "next_poll_at" }, create: { label: "Next Poll At", key: "next_poll_at", value: nextPollAt }, update: { value: nextPollAt, updatedAt: new Date() } }).catch(() => {});
       console.log("[Worker] Mode is OFF — skipping poll, next check in 24h");
       return { oddsCount: 0, matchCount: 0, durationMs: 0, nextPollMs: nextMs };
     }
@@ -63,6 +65,9 @@ const worker = new Worker(
 
     const nextMs = await calcNextPollMs();
     void oddsIngestionQueue.add("scrape:nrl", {}, { delay: nextMs });
+
+    const nextPollAt = new Date(Date.now() + nextMs).toISOString();
+    await prisma.appConfig.upsert({ where: { key: "next_poll_at" }, create: { label: "Next Poll At", key: "next_poll_at", value: nextPollAt }, update: { value: nextPollAt, updatedAt: new Date() } }).catch(() => {});
 
     console.log(`[Worker] Done — ${result.oddsCount} odds, ${result.matchCount} matches, ${result.durationMs}ms · next poll in ${Math.round(nextMs / 60_000)}min`);
 

@@ -47,9 +47,9 @@ export default async function BriefPage() {
   const matches = (await prisma.match.findMany({
     where: { kickoffAt: { gte: now, lte: sevenDaysOut }, status: "upcoming" },
     include: {
-      odds: { where: { marketType: "h2h" } },
+      odds: { where: { marketType: "h2h", bookmaker: { notIn: ["bet365"] } } },
       snapshots: {
-        where: { marketType: "h2h", recordedAt: { gte: snapStart, lte: snapEnd } },
+        where: { marketType: "h2h", recordedAt: { gte: snapStart, lte: snapEnd }, bookmaker: { notIn: ["bet365"] } },
         orderBy: { recordedAt: "asc" },
       },
     },

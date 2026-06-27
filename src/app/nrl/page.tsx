@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
+import { NextPollCountdown } from "@/components/next-poll-countdown";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null; updatedAt: Date };
 type SnapRow  = { matchId: string; bookmaker: string; outcome: string | null; price: number | string };
@@ -24,7 +25,11 @@ const BOOKMAKER_LABEL: Record<string, string> = {
   playup:    "PlayUp",
 };
 
-const ALL_BOOKMAKERS = Object.keys(BOOKMAKER_LABEL);
+// Live API bookmakers — default set shown to all users
+const LIVE_BOOKMAKERS = ["sportsbet", "tab", "ladbrokes", "neds", "pointsbet", "unibet", "betright", "betr", "betfair", "tabtouch", "playup"];
+// Scraped from a third-party site, not a live API — may be hours stale
+const STALE_BOOKS = new Set(["bet365"]);
+const ALL_BOOKMAKERS = LIVE_BOOKMAKERS; // kept for compat
 
 function outcomeLabel(market: MarketType, outcome: string, teamName: string, lineValue: number | null): string {
   if (market === "h2h") return teamName.split(" ").slice(-1)[0];
@@ -79,10 +84,13 @@ export default async function NRLPage({
   const date   = ["today", "tomorrow", "all"].includes(params.date ?? "") ? (params.date ?? "all") : "all";
   const team   = params.team?.trim() ?? "";
 
-  // Bookmaker filter: parse from param, fall back to all
-  const booksParam   = params.books?.split(",").filter(b => ALL_BOOKMAKERS.includes(b)) ?? [];
-  const activeBooks  = booksParam.length > 0 ? booksParam : ALL_BOOKMAKERS;
-  const allSelected  = activeBooks.length === ALL_BOOKMAKERS.length;
+  // Bookmaker filter: parse from param, fall back to all live books (bet365 off by default)
+  const validBooks   = [...LIVE_BOOKMAKERS, "bet365"];
+  const booksParam   = params.books?.split(",").filter(b => validBooks.includes(b)) ?? [];
+  const activeBooks  = booksParam.length > 0 ? booksParam : [...LIVE_BOOKMAKERS];
+  const usingDefault = booksParam.length === 0;
+  const allSelected  = usingDefault; // alias for compat
+  const staleActive  = activeBooks.includes("bet365");
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
@@ -99,18 +107,28 @@ export default async function NRLPage({
     return `/nrl?${sp.toString()}`;
   }
 
-  // Bookmaker toggle: clicking a bookmaker adds/removes from activeBooks
+  // Bookmaker toggle: clicking a live bookmaker adds/removes from activeBooks
   function toggleBook(bm: string) {
     const isActive = activeBooks.includes(bm);
     let newBooks: string[];
     if (isActive) {
       newBooks = activeBooks.filter(b => b !== bm);
-      if (newBooks.length === 0) newBooks = ALL_BOOKMAKERS; // prevent empty
+      if (newBooks.filter(b => !STALE_BOOKS.has(b)).length === 0) newBooks = [...LIVE_BOOKMAKERS]; // keep at least one live book
     } else {
       newBooks = [...activeBooks, bm];
     }
-    const allNow = newBooks.length === ALL_BOOKMAKERS.length;
-    return u({ books: allNow ? "" : newBooks.join(",") });
+    const isDefault = LIVE_BOOKMAKERS.every(b => newBooks.includes(b)) && !newBooks.some(b => STALE_BOOKS.has(b));
+    return u({ books: isDefault ? "" : newBooks.join(",") });
+  }
+
+  // Stale opt-in toggle for bet365
+  function toggleStale() {
+    if (staleActive) {
+      const newBooks = activeBooks.filter(b => !STALE_BOOKS.has(b));
+      const isDefault = LIVE_BOOKMAKERS.every(b => newBooks.includes(b));
+      return u({ books: isDefault ? "" : newBooks.join(",") });
+    }
+    return u({ books: [...activeBooks, "bet365"].join(",") });
   }
 
   const matches = await prisma.match.findMany({
@@ -154,6 +172,10 @@ export default async function NRLPage({
     if (!prevPriceMap.has(key)) prevPriceMap.set(key, Number(s.price));
   }
 
+  // Next poll scheduled time — written by the worker after each cycle
+  const nextPollConfig = await prisma.appConfig.findUnique({ where: { key: "next_poll_at" } });
+  const nextPollAt = nextPollConfig?.value ?? null;
+
   // Last refreshed: newest updatedAt across all fetched odds
   let latestUpdate: Date | null = null;
   for (const m of matches) {
@@ -183,9 +205,15 @@ export default async function NRLPage({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold">NRL Odds Board</h1>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-zinc-400 flex flex-wrap items-center gap-x-2">
               12 bookmakers · next 7 days
-              {freshLabel && <span className="ml-2 text-zinc-600">· updated {freshLabel}</span>}
+              {freshLabel && <span className="text-zinc-600">· updated {freshLabel}</span>}
+              {nextPollAt && (
+                <>
+                  <span className="text-zinc-700">·</span>
+                  <NextPollCountdown nextPollAt={nextPollAt} />
+                </>
+              )}
             </p>
           </div>
           <MarketTabs active={market} basePath="/nrl" extra={`date=${date}${team ? `&team=${encodeURIComponent(team)}` : ""}${!allSelected ? `&books=${activeBooks.join(",")}` : ""}`} />
@@ -209,7 +237,7 @@ export default async function NRLPage({
           <form method="get" action="/nrl" className="flex items-center gap-1.5">
             <input type="hidden" name="market" value={market} />
             <input type="hidden" name="date" value={date} />
-            {!allSelected && <input type="hidden" name="books" value={activeBooks.join(",")} />}
+            {!usingDefault && <input type="hidden" name="books" value={activeBooks.join(",")} />}
             <input
               type="text"
               name="team"
@@ -224,21 +252,32 @@ export default async function NRLPage({
         </div>
 
         {/* Bookmaker toggles — scrollable row */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          <span className="shrink-0 text-xs text-zinc-500">Books</span>
-          <a href={u({ books: "" })}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs transition ${allSelected ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
-            All
-          </a>
-          {ALL_BOOKMAKERS.map(bm => {
-            const active = activeBooks.includes(bm);
-            return (
-              <a key={bm} href={toggleBook(bm)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs transition ${active && !allSelected ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
-                {BOOKMAKER_LABEL[bm]}
-              </a>
-            );
-          })}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <span className="shrink-0 text-xs text-zinc-500">Books</span>
+            <a href={u({ books: "" })}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs transition ${usingDefault ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
+              All
+            </a>
+            {LIVE_BOOKMAKERS.map(bm => {
+              const active = activeBooks.includes(bm);
+              return (
+                <a key={bm} href={toggleBook(bm)}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-xs transition ${active && !usingDefault ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
+                  {BOOKMAKER_LABEL[bm]}
+                </a>
+              );
+            })}
+            <a href={toggleStale()}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs transition border ${staleActive ? "border-amber-700/50 bg-amber-900/20 text-amber-400" : "border-dashed border-zinc-700 text-zinc-600 hover:border-zinc-600 hover:text-zinc-400"}`}>
+              {staleActive ? "Bet365 ⚠" : "+ Bet365"}
+            </a>
+          </div>
+          {staleActive && (
+            <p className="text-[11px] text-amber-700">
+              ⚠ Bet365 data is scraped from a third-party site and may be hours out of date — not used for best-price highlighting. For live Bet365 data, upgrade to OddsJam API.
+            </p>
+          )}
         </div>
 
         {/* Results */}
@@ -256,8 +295,9 @@ export default async function NRLPage({
               const bookmakers = [...new Set(matchOdds.map(o => o.bookmaker))];
               const bestByOutcome: Record<string, number> = {};
               for (const outcome of outcomes) {
-                const rows = matchOdds.filter(o => o.outcome === outcome);
-                bestByOutcome[outcome] = rows.length ? Math.max(...rows.map(o => Number(o.price))) : 0;
+                // Exclude stale books from best-price highlighting — their data can be hours old
+                const liveRows = matchOdds.filter(o => o.outcome === outcome && !STALE_BOOKS.has(o.bookmaker));
+                bestByOutcome[outcome] = liveRows.length ? Math.max(...liveRows.map(o => Number(o.price))) : 0;
               }
               const kickoff = match.kickoffAt.toLocaleString("en-AU", {
                 timeZone: "Australia/Sydney", weekday: "short", day: "numeric",
@@ -278,8 +318,8 @@ export default async function NRLPage({
                         <tr className="border-b border-zinc-800">
                           <th className="w-32 px-4 py-2 text-left text-xs font-normal text-zinc-500">Outcome</th>
                           {bookmakers.map(bm => (
-                            <th key={bm} className="px-3 py-2 text-center text-xs font-normal text-zinc-500 whitespace-nowrap">
-                              {BOOKMAKER_LABEL[bm] ?? bm}
+                            <th key={bm} className={`px-3 py-2 text-center text-xs font-normal whitespace-nowrap ${STALE_BOOKS.has(bm) ? "text-amber-700" : "text-zinc-500"}`}>
+                              {BOOKMAKER_LABEL[bm] ?? bm}{STALE_BOOKS.has(bm) && " ⚠"}
                             </th>
                           ))}
                         </tr>
@@ -306,10 +346,15 @@ export default async function NRLPage({
                                   <td key={bm} className="px-3 py-2.5 text-center">
                                     {price !== null ? (
                                       <a href={odd!.deepLinkUrl} target="_blank" rel="noopener noreferrer"
-                                        className={`inline-flex items-center gap-0.5 whitespace-nowrap ${isBest ? "font-semibold text-green-400 hover:text-green-300" : "text-zinc-300 hover:text-zinc-100"}`}>
-                                        {cellLabel(market, price, lineValue)}
-                                        {drifted   && <span className="text-[9px] text-blue-400">▲</span>}
-                                        {shortened && <span className="text-[9px] text-red-400">▼</span>}
+                                        className="group flex flex-col items-center gap-0 whitespace-nowrap">
+                                        <span className={isBest ? "font-semibold text-green-400 group-hover:text-green-300" : "text-zinc-300 group-hover:text-zinc-100"}>
+                                          {cellLabel(market, price, lineValue)}
+                                        </span>
+                                        {moved !== null && Math.abs(moved) > 0.02 && (
+                                          <span className={`text-[10px] leading-none font-normal ${drifted ? "text-blue-400" : "text-red-400"}`}>
+                                            {drifted ? "▲" : "▼"}{Math.abs(moved).toFixed(2)}
+                                          </span>
+                                        )}
                                       </a>
                                     ) : (
                                       <span className="text-zinc-700">—</span>

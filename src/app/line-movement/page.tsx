@@ -52,7 +52,7 @@ export default async function LineMovementPage({
     where: { kickoffAt: { gte: now, lte: sevenDaysOut } },
     include: {
       snapshots: {
-        where: { recordedAt: { gte: windowStart }, marketType: market as any },
+        where: { recordedAt: { gte: windowStart }, marketType: market as any, bookmaker: { notIn: ["bet365"] } },
         orderBy: { recordedAt: "asc" },
       },
     },
@@ -106,7 +106,7 @@ export default async function LineMovementPage({
     },
     include: {
       snapshots: {
-        where: { marketType: market as any },
+        where: { marketType: market as any, bookmaker: { notIn: ["bet365"] } },
         orderBy: { recordedAt: "asc" },
       },
     },
