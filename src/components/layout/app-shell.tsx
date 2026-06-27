@@ -1,13 +1,18 @@
 import Link from "next/link";
-import { BarChart2, Shield, TrendingUp, Settings } from "lucide-react";
+import { BarChart2, Shield, TrendingUp, Settings, LayoutDashboard, Radio, Activity, BookOpen, Gift } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 
 const navItems = [
-  { href: "/nrl", label: "Odds Board", icon: Shield },
-  { href: "/arbitrage", label: "Arb Finder", icon: TrendingUp },
-  { href: "/ev", label: "EV Finder", icon: BarChart2 },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard",           label: "Dashboard",      icon: LayoutDashboard },
+  { href: "/nrl",                 label: "Odds Board",     icon: Shield },
+  { href: "/live",                label: "Live",           icon: Radio },
+  { href: "/arbitrage",           label: "Arb Finder",     icon: TrendingUp },
+  { href: "/ev",                  label: "EV Finder",      icon: BarChart2 },
+  { href: "/line-movement",       label: "Line Movement",  icon: Activity },
+  { href: "/free-bet-converter",  label: "Free Bet Calc",  icon: Gift },
+  { href: "/bets",                label: "Bet Tracker",    icon: BookOpen },
+  { href: "/settings",            label: "Settings",       icon: Settings },
 ];
 
 export function AppShell({
@@ -27,7 +32,7 @@ export function AppShell({
         <span className="text-base font-semibold tracking-tight">EdgeBoard</span>
         <div className="flex items-center gap-3">
           {userEmail && (
-            <span className="max-w-[140px] truncate text-xs text-zinc-500">{userEmail}</span>
+            <span className="max-w-35 truncate text-xs text-zinc-500">{userEmail}</span>
           )}
           <SignOutButton />
         </div>

@@ -1,5 +1,12 @@
 import { Resend } from "resend";
 import twilio from "twilio";
+import webpush from "web-push";
+
+webpush.setVapidDetails(
+  "mailto:alerts@edgeboard.com.au",
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
+  process.env.VAPID_PRIVATE_KEY ?? "",
+);
 
 const FROM_EMAIL = "EdgeBoard Alerts <alerts@edgeboard.com.au>";
 const FROM_PHONE = process.env.TWILIO_PHONE_NUMBER ?? "";
@@ -23,6 +30,23 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 
 export async function sendSms(to: string, body: string): Promise<void> {
   await twilioClient().messages.create({ from: FROM_PHONE, to, body });
+}
+
+export async function sendPush(
+  subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>,
+  title: string,
+  body: string,
+  url: string,
+): Promise<void> {
+  const payload = JSON.stringify({ title, body, url });
+  await Promise.allSettled(
+    subscriptions.map(sub =>
+      webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload,
+      )
+    )
+  );
 }
 
 // ─── Alert message builders ──────────────────────────────────────────────────

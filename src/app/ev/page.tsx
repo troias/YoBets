@@ -33,6 +33,7 @@ type EVRow = {
   offeredOdds: number;
   fairOdds: number;
   evPercent: number;
+  kellyPct: number;
   deepLinkUrl: string;
 };
 
@@ -115,6 +116,9 @@ function computeEV(
     for (const o of aOdds) {
       const ev = (Number(o.price) * fairProbA - 1) * 100;
       if (ev >= minEv) {
+        // Quarter Kelly: f = (p*b - q) / b * 0.25, where b = odds - 1
+        const b = Number(o.price) - 1;
+        const kellyPct = b > 0 ? Math.max(0, (fairProbA * b - (1 - fairProbA)) / b) * 25 : 0;
         rows.push({
           key: `${matchId}-${o.bookmaker}-${sideA}-${lineKey}`,
           matchName,
@@ -124,6 +128,7 @@ function computeEV(
           offeredOdds: Number(o.price),
           fairOdds: fairOddsA,
           evPercent: ev,
+          kellyPct,
           deepLinkUrl: o.deepLinkUrl,
         });
       }
@@ -132,6 +137,8 @@ function computeEV(
     for (const o of bOdds) {
       const ev = (Number(o.price) * fairProbB - 1) * 100;
       if (ev >= minEv) {
+        const b = Number(o.price) - 1;
+        const kellyPct = b > 0 ? Math.max(0, (fairProbB * b - (1 - fairProbB)) / b) * 25 : 0;
         rows.push({
           key: `${matchId}-${o.bookmaker}-${sideB}-${lineKey}`,
           matchName,
@@ -141,6 +148,7 @@ function computeEV(
           offeredOdds: Number(o.price),
           fairOdds: fairOddsB,
           evPercent: ev,
+          kellyPct,
           deepLinkUrl: o.deepLinkUrl,
         });
       }
@@ -285,7 +293,8 @@ export default async function EVPage({
                   <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Offered</th>
                   <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Fair</th>
                   <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">EV</th>
-                  <th className="px-4 py-2.5" />
+                  <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">¼ Kelly</th>
+                  <th className="px-4 py-2.5 text-xs font-normal text-zinc-500 sr-only">Bet</th>
                 </tr>
               </thead>
               <tbody>
@@ -326,6 +335,11 @@ export default async function EVPage({
                           }`}
                         >
                           +{row.evPercent.toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="text-xs text-zinc-400">
+                          {row.kellyPct.toFixed(1)}%
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">

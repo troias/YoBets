@@ -11,6 +11,9 @@ const BOOKMAKER_LABEL: Record<string, string> = {
   betr: "Betr", betfair: "Betfair", tabtouch: "TABtouch", playup: "PlayUp",
 };
 
+const WINDOW_OPTIONS = ["1h", "3h", "6h", "24h", "48h"];
+const WINDOW_HOURS: Record<string, number> = { "1h": 1, "3h": 3, "6h": 6, "24h": 24, "48h": 48 };
+
 type Movement = {
   matchId: string;
   matchName: string;
@@ -28,11 +31,13 @@ type Movement = {
 export default async function LineMovementPage({
   searchParams,
 }: {
-  searchParams: Promise<{ market?: string; window?: string }>;
+  searchParams: Promise<{ market?: string; window?: string; minMove?: string }>;
 }) {
   const params = await searchParams;
   const market = (["h2h", "line", "total"].includes(params.market ?? "") ? params.market : "h2h") as MarketType;
-  const windowHours = [6, 24, 48].includes(Number(params.window ?? 24)) ? Number(params.window ?? 24) : 24;
+  const windowKey = WINDOW_OPTIONS.includes(params.window ?? "") ? (params.window ?? "6h") : "6h";
+  const windowHours = WINDOW_HOURS[windowKey];
+  const minMove = Math.max(0, Number(params.minMove ?? 1));
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
@@ -72,7 +77,7 @@ export default async function LineMovementPage({
       const openPrice = Number(open.price);
       const closePrice = Number(close.price);
       const changePct = ((closePrice - openPrice) / openPrice) * 100;
-      if (Math.abs(changePct) < 1) continue; // skip tiny moves
+      if (Math.abs(changePct) < minMove) continue;
 
       const [bookmaker, outcome] = key.split("|");
       movements.push({
@@ -121,7 +126,7 @@ export default async function LineMovementPage({
       if (snaps.length < 2) continue;
       const open = snaps[0];
       // Closing = last snapshot before kickoff
-      const closing = snaps.filter(s => s.recordedAt <= match.kickoffAt).pop() ?? snaps[snaps.length - 1];
+      const closing = snaps.filter((s: (typeof snaps)[number]) => s.recordedAt <= match.kickoffAt).pop() ?? snaps[snaps.length - 1];
       const openPrice = Number(open.price);
       const closePrice = Number(closing.price);
       const changePct = ((closePrice - openPrice) / openPrice) * 100;
@@ -145,10 +150,11 @@ export default async function LineMovementPage({
   }
   clvRows.sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
 
-  const windowPills = [
-    { label: "6h",  value: "6"  },
-    { label: "24h", value: "24" },
-    { label: "48h", value: "48" },
+  const minMoveFilters = [
+    { label: "Any", value: "0" },
+    { label: "1%+", value: "1" },
+    { label: "3%+", value: "3" },
+    { label: "5%+", value: "5" },
   ];
 
   return (
@@ -162,18 +168,29 @@ export default async function LineMovementPage({
             <h1 className="text-xl font-semibold">Line Movement</h1>
             <p className="text-sm text-zinc-400">Track odds moves and closing line value</p>
           </div>
-          <MarketTabs active={market} basePath="/line-movement" extra={`window=${windowHours}`} />
+          <MarketTabs active={market} basePath="/line-movement" extra={`window=${windowKey}&minMove=${minMove}`} />
         </div>
 
-        {/* Window filter */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-zinc-500">Window</span>
-          {windowPills.map(p => (
-            <a key={p.value} href={`?market=${market}&window=${p.value}`}
-              className={`rounded-lg px-3 py-1.5 text-xs transition ${String(windowHours) === p.value ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
-              {p.label}
-            </a>
-          ))}
+        {/* Filters */}
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500">Window</span>
+            {WINDOW_OPTIONS.map(w => (
+              <a key={w} href={`?market=${market}&window=${w}&minMove=${minMove}`}
+                className={`rounded-lg px-3 py-1.5 text-xs transition ${windowKey === w ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
+                {w}
+              </a>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500">Min move</span>
+            {minMoveFilters.map(f => (
+              <a key={f.value} href={`?market=${market}&window=${windowKey}&minMove=${f.value}`}
+                className={`rounded-lg px-3 py-1.5 text-xs transition ${String(minMove) === f.value ? "bg-zinc-700 text-zinc-100" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}>
+                {f.label}
+              </a>
+            ))}
+          </div>
         </div>
 
         {/* Upcoming line movers */}
@@ -183,7 +200,7 @@ export default async function LineMovementPage({
           </h2>
           {movements.length === 0 ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-8 text-center text-sm text-zinc-500">
-              No significant line movement yet. Data builds up as the worker polls each cycle.
+              No moves ≥{minMove}% in the last {windowKey}. Data builds up as the worker polls each cycle.
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
