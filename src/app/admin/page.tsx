@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { AppConfig } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
@@ -22,7 +23,7 @@ const SERVICES = [
   ]},
 ] as const;
 
-const KNOWN_KEYS = new Set(SERVICES.flatMap((s) => s.entries.map((e) => e.key)));
+const KNOWN_KEYS = new Set<string>(SERVICES.flatMap((s) => s.entries.map((e) => e.key as string)));
 
 export default async function AdminPage() {
   const cookieStore = await cookies();
@@ -49,8 +50,8 @@ export default async function AdminPage() {
   const mrr = priceMonthly > 0 ? active * priceMonthly : null;
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
-  const configMap = new Map(appConfigs.map((c) => [c.key, c]));
-  const customConfigs = appConfigs.filter((c) => !KNOWN_KEYS.has(c.key as never));
+  const configMap = new Map(appConfigs.map((c: AppConfig) => [c.key, c]));
+  const customConfigs = appConfigs.filter((c: AppConfig) => !KNOWN_KEYS.has(c.key));
 
   const statCards = [
     { label: "Active",        value: active },
