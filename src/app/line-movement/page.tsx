@@ -204,7 +204,8 @@ export default async function LineMovementPage({
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-120 text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800">
                     <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Match</th>
@@ -232,7 +233,7 @@ export default async function LineMovementPage({
                         <td className="px-4 py-3 text-center text-zinc-500">{m.openPrice.toFixed(2)}</td>
                         <td className="px-4 py-3 text-center font-medium text-zinc-100">{m.closePrice.toFixed(2)}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`font-semibold ${shortened ? "text-red-400" : "text-green-400"}`}>
+                          <span className={`font-bold ${shortened ? "text-red-400" : "text-green-400"}`}>
                             {shortened ? "▼" : "▲"} {Math.abs(m.changePct).toFixed(1)}%
                           </span>
                         </td>
@@ -241,6 +242,7 @@ export default async function LineMovementPage({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </section>
@@ -255,7 +257,8 @@ export default async function LineMovementPage({
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-120 text-sm">
                 <thead>
                   <tr className="border-b border-zinc-800">
                     <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Match</th>
@@ -283,7 +286,7 @@ export default async function LineMovementPage({
                         <td className="px-4 py-3 text-center text-zinc-500">{m.openPrice.toFixed(2)}</td>
                         <td className="px-4 py-3 text-center font-medium text-zinc-100">{m.closePrice.toFixed(2)}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`font-semibold ${shortened ? "text-red-400" : "text-green-400"}`}>
+                          <span className={`font-bold ${shortened ? "text-red-400" : "text-green-400"}`}>
                             {shortened ? "▼" : "▲"} {Math.abs(m.changePct).toFixed(1)}%
                           </span>
                         </td>
@@ -292,6 +295,7 @@ export default async function LineMovementPage({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </section>

@@ -183,8 +183,8 @@ export default async function BriefPage() {
           {/* Summary chips */}
           <div className="flex flex-wrap gap-2">
             <Chip label={`${matches.length} matches`} />
-            <Chip label={`${highEvCount} bets ≥5% EV`} highlight={highEvCount > 0} color="green" />
-            <Chip label={`${arbCount} arb${arbCount !== 1 ? "s" : ""}`} highlight={arbCount > 0} color="green" />
+            <Chip label={`${highEvCount} bets ≥5% EV`} highlight={highEvCount > 0} color="green" pulse={highEvCount > 0} />
+            <Chip label={arbCount > 0 ? `${arbCount} arb${arbCount !== 1 ? "s" : ""} LIVE` : "no arbs"} highlight={arbCount > 0} color="green" pulse={arbCount > 0} />
             <Chip label={`${topMovers.length} movers`} highlight={topMovers.length > 0} color="blue" />
           </div>
 
@@ -196,8 +196,11 @@ export default async function BriefPage() {
               <Row key={i}
                 left={
                   <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs text-zinc-600 tabular-nums">{i + 1}.</span>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      {i === 0
+                        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-400 tracking-wide">BEST</span>
+                        : <span className="text-xs text-zinc-600 tabular-nums">{i + 1}.</span>
+                      }
                       <span className="text-sm font-medium text-zinc-100">{b.label}</span>
                       <span className="text-xs text-zinc-500 truncate max-w-48">{b.matchName}</span>
                     </div>
@@ -209,8 +212,8 @@ export default async function BriefPage() {
                 }
                 right={
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-green-400">+{(b.ev * 100).toFixed(1)}%</span>
-                    {b.deepLinkUrl && <BetLink href={b.deepLinkUrl} color="green" />}
+                    <span className="text-sm font-bold text-amber-400">+{(b.ev * 100).toFixed(1)}%</span>
+                    {b.deepLinkUrl && <BetLink href={`/api/bet?bm=${b.bookmaker}`} color="amber" />}
                   </div>
                 }
               />
@@ -240,7 +243,7 @@ export default async function BriefPage() {
                 right={
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-amber-400">+{m.deviation.toFixed(1)}%</span>
-                    {m.deepLinkUrl && <BetLink href={m.deepLinkUrl} color="amber" />}
+                    {m.deepLinkUrl && <BetLink href={`/api/bet?bm=${m.bookmaker}`} color="amber" />}
                   </div>
                 }
               />
@@ -268,7 +271,7 @@ export default async function BriefPage() {
                     </div>
                   }
                   right={
-                    <span className={`text-sm font-bold ${shortened ? "text-red-400" : "text-blue-400"}`}>
+                    <span className={`text-sm font-bold ${shortened ? "text-red-400" : "text-green-400"}`}>
                       {shortened ? "▼" : "▲"}{Math.abs(m.changePct).toFixed(1)}%
                     </span>
                   }
@@ -285,14 +288,15 @@ export default async function BriefPage() {
 
 // ─── Small UI helpers ─────────────────────────────────────────────────────────
 
-function Chip({ label, highlight, color }: { label: string; highlight?: boolean; color?: "green" | "blue" }) {
+function Chip({ label, highlight, color, pulse }: { label: string; highlight?: boolean; color?: "green" | "blue"; pulse?: boolean }) {
   const active = highlight && color;
   return (
-    <span className={`rounded-full px-3 py-1 text-xs ${
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${
       active === "green" ? "bg-green-900/40 text-green-400" :
       active === "blue"  ? "bg-blue-900/40 text-blue-400" :
       "bg-zinc-900 text-zinc-500"
     }`}>
+      {pulse && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current" />}
       {label}
     </span>
   );
@@ -323,10 +327,8 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-zinc-600">{children}</p>;
 }
 
-function BetLink({ href, color }: { href: string; color: "green" | "amber" }) {
-  const cls = color === "green"
-    ? "bg-green-600/20 text-green-400 hover:bg-green-600/30"
-    : "bg-amber-600/20 text-amber-400 hover:bg-amber-600/30";
+function BetLink({ href, color }: { href: string; color: "amber" }) {
+  const cls = "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 font-medium";
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
       className={`rounded px-2.5 py-1 text-xs transition ${cls}`}>

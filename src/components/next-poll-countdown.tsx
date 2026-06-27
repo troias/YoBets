@@ -31,14 +31,19 @@ export function NextPollCountdown({ nextPollAt }: { nextPollAt: string }) {
   }, [nextPollAt]);
 
   if (secondsLeft === 0) {
-    return <span className="text-xs text-zinc-500 animate-pulse">updating…</span>;
+    return <span className="text-xs text-green-400 animate-pulse font-medium">refreshing…</span>;
   }
 
   const mins = Math.floor(secondsLeft / 60);
   const secs = String(secondsLeft % 60).padStart(2, "0");
 
+  const urgencyClass =
+    secondsLeft < 60  ? "text-red-400 animate-pulse font-medium" :
+    secondsLeft < 180 ? "text-amber-400" :
+    "text-zinc-500";
+
   return (
-    <span className="text-xs text-zinc-500">
+    <span className={`text-xs ${urgencyClass}`}>
       next update {mins > 0 ? `${mins}m ` : ""}{secs}s
     </span>
   );

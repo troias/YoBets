@@ -299,16 +299,32 @@ export default async function NRLPage({
                 const liveRows = matchOdds.filter(o => o.outcome === outcome && !STALE_BOOKS.has(o.bookmaker));
                 bestByOutcome[outcome] = liveRows.length ? Math.max(...liveRows.map(o => Number(o.price))) : 0;
               }
+              // Hot match: any outcome has >8% spread across live bookmakers
+              const liveOdds = matchOdds.filter(o => !STALE_BOOKS.has(o.bookmaker));
+              const isHot = outcomes.some(oc => {
+                const prices = liveOdds.filter(o => o.outcome === oc).map(o => Number(o.price));
+                if (prices.length < 2) return false;
+                const mn = Math.min(...prices), mx = Math.max(...prices);
+                return (mx - mn) / mn * 100 >= 8;
+              });
+
               const kickoff = match.kickoffAt.toLocaleString("en-AU", {
                 timeZone: "Australia/Sydney", weekday: "short", day: "numeric",
                 month: "short", hour: "numeric", minute: "2-digit", hour12: true,
               });
               if (!bookmakers.length) return null;
               return (
-                <div key={match.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
-                  <div className="border-b border-zinc-800 px-4 py-3">
-                    <div className="font-medium">
-                      {match.homeTeam} <span className="text-zinc-500">vs</span> {match.awayTeam}
+                <div key={match.id} className={`overflow-hidden rounded-xl border bg-zinc-950/90 ${isHot ? "border-amber-500/40" : "border-zinc-800"}`}>
+                  <div className={`border-b px-4 py-3 ${isHot ? "border-amber-500/20" : "border-zinc-800"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium">
+                        {match.homeTeam} <span className="text-zinc-500">vs</span> {match.awayTeam}
+                      </div>
+                      {isHot && (
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                          🔥 Spread
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 text-xs text-zinc-500">{kickoff} AEST</div>
                   </div>
@@ -342,16 +358,19 @@ export default async function NRLPage({
                                 const moved = prev !== undefined && price !== null ? price - prev : null;
                                 const drifted  = moved !== null && moved >  0.02;
                                 const shortened = moved !== null && moved < -0.02;
+                                const flashCls = drifted ? "animate-flash-green" : shortened ? "animate-flash-red" : "";
                                 return (
-                                  <td key={bm} className="px-3 py-2.5 text-center">
+                                  <td key={bm} className={`px-3 py-2.5 text-center ${flashCls}`}>
                                     {price !== null ? (
-                                      <a href={odd!.deepLinkUrl} target="_blank" rel="noopener noreferrer"
+                                      <a href={`/api/bet?bm=${bm}`} target="_blank" rel="noopener noreferrer"
                                         className="group flex flex-col items-center gap-0 whitespace-nowrap">
-                                        <span className={isBest ? "font-semibold text-green-400 group-hover:text-green-300" : "text-zinc-300 group-hover:text-zinc-100"}>
+                                        <span className={isBest
+                                          ? "font-bold text-amber-400 group-hover:text-amber-300 rounded px-0.5 bg-amber-500/10 ring-1 ring-amber-500/40"
+                                          : "text-zinc-300 group-hover:text-white"}>
                                           {cellLabel(market, price, lineValue)}
                                         </span>
                                         {moved !== null && Math.abs(moved) > 0.02 && (
-                                          <span className={`text-[10px] leading-none font-normal ${drifted ? "text-blue-400" : "text-red-400"}`}>
+                                          <span className={`text-[10px] leading-none font-bold ${drifted ? "text-green-400" : "text-red-400"}`}>
                                             {drifted ? "▲" : "▼"}{Math.abs(moved).toFixed(2)}
                                           </span>
                                         )}

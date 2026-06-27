@@ -428,6 +428,40 @@ async function checkMatchAlerts(rows: NrlOddsRow[], priorPrices: Map<string, num
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
+async function saveArbSnapshot(): Promise<void> {
+  const now = new Date();
+  const sevenDaysOut = new Date(now.getTime() + 7 * 86_400_000);
+  const matches = await prisma.match.findMany({
+    where: { kickoffAt: { gte: now, lte: sevenDaysOut } },
+    include: { odds: { where: { marketType: "h2h" as any, bookmaker: { notIn: ["bet365"] } } } },
+  });
+  const arbs: Array<{ matchId: string; matchName: string; kickoffAt: string; roiPercent: number; bookmakers: string[] }> = [];
+  for (const match of matches) {
+    const homeOdds = match.odds.filter(o => o.outcome === "home");
+    const awayOdds = match.odds.filter(o => o.outcome === "away");
+    if (!homeOdds.length || !awayOdds.length) continue;
+    const bestHome = homeOdds.reduce((b, o) => (Number(o.price) > Number(b.price) ? o : b));
+    const bestAway = awayOdds.reduce((b, o) => (Number(o.price) > Number(b.price) ? o : b));
+    const result = detectTwoWayArbitrage([
+      { sportsbook: bestHome.bookmaker, selection: "home", odds: Number(bestHome.price) },
+      { sportsbook: bestAway.bookmaker, selection: "away", odds: Number(bestAway.price) },
+    ]);
+    if (!result) continue;
+    arbs.push({
+      matchId: match.id,
+      matchName: `${match.homeTeam} vs ${match.awayTeam}`,
+      kickoffAt: match.kickoffAt.toISOString(),
+      roiPercent: result.roiPercent,
+      bookmakers: [bestHome.bookmaker, bestAway.bookmaker],
+    });
+  }
+  await prisma.appConfig.upsert({
+    where: { key: "last_arbs" },
+    create: { key: "last_arbs", label: "Last arbs snapshot", value: JSON.stringify({ arbs, savedAt: now.toISOString() }), updatedAt: now },
+    update: { value: JSON.stringify({ arbs, savedAt: now.toISOString() }), updatedAt: now },
+  });
+}
+
 export async function runPollCycle(): Promise<{ oddsCount: number; matchCount: number; durationMs: number }> {
   const started = Date.now();
 
@@ -451,6 +485,7 @@ export async function runPollCycle(): Promise<{ oddsCount: number; matchCount: n
     void pruneOldSnapshots().catch(() => {});
     void checkAndSendAlerts(rows, priorPrices).catch(e => console.warn("[Poll] Alert check failed:", e.message));
     void checkMatchAlerts(rows, priorPrices).catch(e => console.warn("[Poll] Match alert check failed:", e.message));
+    void saveArbSnapshot().catch(e => console.warn("[Poll] Arb snapshot failed:", e.message));
   } else {
     console.warn("[Poll] No odds rows returned from any source");
   }

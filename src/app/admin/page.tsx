@@ -24,6 +24,7 @@ const SERVICES = [
     { label: "Webhook Secret",   key: "STRIPE_WEBHOOK_SECRET" },
     { label: "Monthly Price ID", key: "STRIPE_PRICE_MONTHLY" },
   ]},
+  { group: "Discord", entries: [{ label: "Webhook URL", key: "DISCORD_WEBHOOK_URL" }] },
 ] as const;
 
 const KNOWN_KEYS = new Set<string>(SERVICES.flatMap((s) => s.entries.map((e) => e.key as string)));
@@ -54,8 +55,44 @@ export default async function AdminPage() {
   const winRate = settled > 0 ? ((wins / settled) * 100).toFixed(1) : null;
   const totalPl = Number(betAgg._sum.profit ?? 0);
   const configMap = new Map<string, AppConfigRow>(appConfigs.map((c: AppConfigRow) => [c.key, c]));
-  const INTERNAL_KEYS = new Set(["worker_mode", "next_poll_at"]);
-  const customConfigs: AppConfigRow[] = appConfigs.filter((c: AppConfigRow) => !KNOWN_KEYS.has(c.key) && !INTERNAL_KEYS.has(c.key));
+  const INTERNAL_KEYS = new Set(["worker_mode", "next_poll_at", "last_arbs"]);
+  const customConfigs: AppConfigRow[] = appConfigs.filter((c: AppConfigRow) =>
+    !KNOWN_KEYS.has(c.key) &&
+    !INTERNAL_KEYS.has(c.key) &&
+    !c.key.startsWith("affiliate_") &&
+    !c.key.startsWith("clicks_")
+  );
+
+  const AFFILIATE_BOOKS = [
+    { key: "sportsbet", label: "Sportsbet",  program: "Sportsbet Affiliates",      signUpUrl: "https://affiliates.sportsbet.com.au" },
+    { key: "tab",       label: "TAB",         program: "Tabcorp Affiliates",         signUpUrl: "https://www.tab.com.au" },
+    { key: "ladbrokes", label: "Ladbrokes",   program: "Income Access",             signUpUrl: "https://www.ladbrokesaffiliates.com.au" },
+    { key: "neds",      label: "Neds",        program: "Income Access",             signUpUrl: "https://www.nedsaffiliates.com.au" },
+    { key: "unibet",    label: "Unibet",      program: "Kindred Affiliates",        signUpUrl: "https://www.kindredaffiliates.com" },
+    { key: "pointsbet", label: "PointsBet",   program: "PointsBet Affiliates",      signUpUrl: "https://affiliates.pointsbet.com.au" },
+    { key: "betfair",   label: "Betfair",     program: "Betfair Affiliates AU",     signUpUrl: "https://affiliates.betfair.com.au" },
+    { key: "betright",  label: "BetRight",    program: "BetRight Affiliates",       signUpUrl: "https://betright.com.au" },
+    { key: "betr",      label: "Betr",        program: "Betr Affiliates",           signUpUrl: "https://betr.com.au" },
+    { key: "tabtouch",  label: "TABtouch",    program: "TABtouch Affiliates",       signUpUrl: "https://www.tabtouch.com.au" },
+    { key: "playup",    label: "PlayUp",      program: "PlayUp Affiliates",         signUpUrl: "https://www.playup.com.au" },
+  ] as const;
+
+  // Click counts stored as clicks_sportsbet, clicks_tab, etc. in AppConfig
+  const clicksByBook = new Map<string, number>(
+    appConfigs
+      .filter((c: AppConfigRow) => c.key.startsWith("clicks_"))
+      .map((c: AppConfigRow) => [c.key.replace("clicks_", ""), Number(c.value) || 0])
+  );
+  const totalClicks = [...clicksByBook.values()].reduce((s, n) => s + n, 0);
+
+  // Stripe health check
+  const stripeKeys = ["STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_MONTHLY"];
+  const stripeStatus = stripeKeys.map(k => ({
+    key: k,
+    label: k.replace("STRIPE_", "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
+    set: !!(configMap.get(k)?.value || process.env[k]),
+  }));
+  const stripeAllSet = stripeStatus.every(s => s.set);
   const workerMode = (configMap.get("worker_mode")?.value ?? "production") as "production" | "slow" | "off";
 
   const statCards = [
@@ -119,6 +156,86 @@ export default async function AdminPage() {
                 ${totalPl.toFixed(2)}
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Stripe Health */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-300">Stripe — Subscription Payments</h2>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${stripeAllSet ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
+              {stripeAllSet ? "Live" : "Not configured"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {stripeStatus.map(s => (
+              <div key={s.key} className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${s.set ? "bg-green-500" : "bg-red-500"}`} />
+                <span className="text-xs text-zinc-500">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          {!stripeAllSet && (
+            <p className="text-xs text-amber-600">
+              Paste Stripe keys in App Config below to enable $19/month subscriptions.
+            </p>
+          )}
+        </div>
+
+        {/* Affiliate Links */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-medium text-zinc-300">Affiliate Links</h2>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Every &quot;Bet →&quot; click goes through <code className="text-zinc-400">/api/bet?bm=sportsbet</code> and redirects to your affiliate URL.
+                Earn $100–200 AUD CPA per new depositing customer. Sign up, get your tracking link, paste it below — no redeploy needed.
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-xs text-zinc-500">Total clicks</p>
+              <p className="text-xl font-bold text-amber-400">{totalClicks}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {AFFILIATE_BOOKS.map(({ key, label, program, signUpUrl }) => {
+              const affKey = `affiliate_${key}`;
+              const existing = configMap.get(affKey);
+              const clicks = clicksByBook.get(key) ?? 0;
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  <div className="w-24 shrink-0">
+                    <p className="text-sm text-zinc-200">{label}</p>
+                    <p className="text-[10px] text-zinc-600">{clicks} clicks</p>
+                  </div>
+                  {existing ? (
+                    <div className="flex flex-1 items-center gap-2 min-w-0">
+                      <span className="flex-1 truncate font-mono text-xs text-green-400">{existing.value}</span>
+                      <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-green-900/50 text-green-400">live</span>
+                      <form action={deleteAppConfig.bind(null, existing.id)}>
+                        <button type="submit" className="text-xs text-red-400 hover:text-red-300 transition">Remove</button>
+                      </form>
+                    </div>
+                  ) : (
+                    <form action={upsertAppConfig} className="flex flex-1 gap-2">
+                      <input type="hidden" name="label" value={`${label} Affiliate`} />
+                      <input type="hidden" name="key" value={affKey} />
+                      <input name="value" placeholder={`Paste ${program} tracking URL…`} required
+                        className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none ring-1 ring-zinc-800 focus:ring-zinc-600" />
+                      <button type="submit"
+                        className="shrink-0 rounded-lg bg-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-600">
+                        Save
+                      </button>
+                      <a href={signUpUrl} target="_blank" rel="noopener noreferrer"
+                        className="shrink-0 rounded-lg bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-400 transition hover:bg-amber-500/20">
+                        Sign up →
+                      </a>
+                    </form>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

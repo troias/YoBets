@@ -44,6 +44,33 @@ async function calcNextPollMs(): Promise<number> {
   return mul * 60 * 60_000;
 }
 
+// ─── Discord webhook ──────────────────────────────────────────────────────────
+
+async function notifyDiscord(result: { oddsCount: number; matchCount: number; durationMs: number }, nextMs: number) {
+  const config = await prisma.appConfig.findUnique({ where: { key: "DISCORD_WEBHOOK_URL" } }).catch(() => null);
+  if (!config?.value) return;
+
+  const nextMins = Math.round(nextMs / 60_000);
+  const aest = new Date().toLocaleTimeString("en-AU", { timeZone: "Australia/Sydney", hour: "numeric", minute: "2-digit", hour12: true });
+
+  const body = {
+    embeds: [{
+      color: 0x22c55e,
+      title: "Odds updated",
+      description: `${result.oddsCount} odds · ${result.matchCount} matches · ${(result.durationMs / 1000).toFixed(1)}s`,
+      fields: [{ name: "Next update", value: `~${nextMins} min`, inline: true }],
+      footer: { text: `EdgeBoard · ${aest} AEST` },
+      url: process.env.NEXT_PUBLIC_APP_URL ?? "",
+    }],
+  };
+
+  await fetch(config.value, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 // ─── BullMQ worker ────────────────────────────────────────────────────────────
 
 void oddsIngestionQueue.add("scrape:nrl", {}, { jobId: "scrape:nrl:boot" });
@@ -68,6 +95,8 @@ const worker = new Worker(
 
     const nextPollAt = new Date(Date.now() + nextMs).toISOString();
     await prisma.appConfig.upsert({ where: { key: "next_poll_at" }, create: { label: "Next Poll At", key: "next_poll_at", value: nextPollAt }, update: { value: nextPollAt, updatedAt: new Date() } }).catch(() => {});
+
+    void notifyDiscord(result, nextMs);
 
     console.log(`[Worker] Done — ${result.oddsCount} odds, ${result.matchCount} matches, ${result.durationMs}ms · next poll in ${Math.round(nextMs / 60_000)}min`);
 

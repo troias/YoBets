@@ -1,4 +1,3 @@
-import { Lock } from "lucide-react";
 import { getSubscriptionStatus, isSubscribed, isAdminEmail } from "@/lib/subscription";
 import { CheckoutButton } from "@/components/billing/checkout-button";
 
@@ -19,22 +18,21 @@ export async function PaywallGate({
 
   const monthlyPriceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "";
 
+  // Soft gate: show content but with an upgrade nudge banner
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950/90 py-20 text-center">
-      <Lock className="mb-4 h-8 w-8 text-zinc-600" />
-      <h2 className="text-lg font-semibold">Start your free trial</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        7 days free · then $12 AUD/month
-      </p>
-      <p className="mt-0.5 text-xs text-zinc-600">
-        Full access to odds board, arb finder, and EV finder
-      </p>
-      <div className="mt-6">
-        <CheckoutButton priceId={monthlyPriceId} />
+    <>
+      <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-zinc-200">Free plan</p>
+          <p className="text-xs text-zinc-500">
+            Go Pro for live 30-second polling, push alerts, and priority access · $19 AUD/month
+          </p>
+        </div>
+        <div className="shrink-0">
+          <CheckoutButton priceId={monthlyPriceId} label="Go Pro →" variant="secondary" />
+        </div>
       </div>
-      <p className="mt-3 text-xs text-zinc-600">
-        No credit card required during trial · Cancel anytime
-      </p>
-    </div>
+      {children}
+    </>
   );
 }

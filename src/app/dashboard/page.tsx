@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { PaywallGate } from "@/components/paywall-gate";
 import { detectTwoWayArbitrage } from "@/lib/utils/arbitrage";
+import { LastVisitUpdater } from "@/components/last-visit-updater";
 
 type OddsRow = { bookmaker: string; marketType: string; outcome: string | null; price: number | string; deepLinkUrl?: string; lineValue?: number | string | null };
 
@@ -22,23 +23,35 @@ export default async function DashboardPage() {
   const now = new Date();
   const sevenDaysOut = new Date(now.getTime() + 7 * 86_400_000);
 
-  const [upcomingMatches, liveMatches, recentMoves] = await Promise.all([
+  const lastVisitRaw = cookieStore.get("last_visit")?.value;
+  const lastVisit = lastVisitRaw ? new Date(lastVisitRaw) : null;
+  const lastVisitValid = lastVisit && (now.getTime() - lastVisit.getTime()) < 24 * 3_600_000 && lastVisit < now;
+
+  const [upcomingMatches, liveMatches, recentMoves, sinceVisitMoves] = await Promise.all([
     prisma.match.findMany({
       where: { kickoffAt: { gte: now, lte: sevenDaysOut }, status: "upcoming" },
-      include: { odds: { where: { marketType: "h2h" } } },
+      include: { odds: { where: { marketType: "h2h", bookmaker: { notIn: ["bet365"] } } } },
       orderBy: { kickoffAt: "asc" },
     }),
     prisma.match.findMany({
       where: { status: "live" },
-      include: { odds: { where: { marketType: "h2h" } } },
+      include: { odds: { where: { marketType: "h2h", bookmaker: { notIn: ["bet365"] } } } },
       orderBy: { kickoffAt: "asc" },
     }),
     prisma.oddsSnapshot.findMany({
-      where: { recordedAt: { gte: new Date(now.getTime() - 2 * 3_600_000) } },
+      where: { recordedAt: { gte: new Date(now.getTime() - 2 * 3_600_000) }, bookmaker: { notIn: ["bet365"] } },
       orderBy: { recordedAt: "desc" },
       take: 200,
       include: { match: { select: { homeTeam: true, awayTeam: true, kickoffAt: true } } },
     }),
+    lastVisitValid
+      ? prisma.oddsSnapshot.findMany({
+          where: { recordedAt: { gte: lastVisit! }, bookmaker: { notIn: ["bet365"] }, marketType: "h2h" },
+          orderBy: { recordedAt: "asc" },
+          take: 300,
+          include: { match: { select: { homeTeam: true, awayTeam: true } } },
+        })
+      : Promise.resolve([] as Awaited<ReturnType<typeof prisma.oddsSnapshot.findMany<{ include: { match: { select: { homeTeam: true; awayTeam: true } } } }>>>),
   ]);
 
   // Find arbs across all upcoming matches
@@ -128,6 +141,34 @@ export default async function DashboardPage() {
   }
   steamMoves.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 
+  // "What changed while you were away" — price moves since last_visit cookie
+  type VisitMove = { matchName: string; bookmaker: string; outcome: string; from: number; to: number; pct: number };
+  const visitMoves: VisitMove[] = [];
+  if (lastVisitValid && sinceVisitMoves.length > 0) {
+    const visitByKey = new Map<string, typeof sinceVisitMoves>();
+    for (const snap of sinceVisitMoves) {
+      const k = `${snap.matchId}|${snap.bookmaker}|${snap.outcome}`;
+      if (!visitByKey.has(k)) visitByKey.set(k, []);
+      visitByKey.get(k)!.push(snap);
+    }
+    for (const [, snaps] of visitByKey) {
+      if (snaps.length < 2) continue;
+      const from = Number(snaps[0].price);
+      const to = Number(snaps[snaps.length - 1].price);
+      const pct = ((to - from) / from) * 100;
+      if (Math.abs(pct) < 2) continue;
+      visitMoves.push({
+        matchName: `${snaps[0].match.homeTeam} vs ${snaps[0].match.awayTeam}`,
+        bookmaker: BOOKMAKER_LABEL[snaps[0].bookmaker] ?? snaps[0].bookmaker,
+        outcome: snaps[0].outcome ?? "",
+        from,
+        to,
+        pct,
+      });
+    }
+    visitMoves.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+  }
+
   const nextMatch = upcomingMatches[0];
   const checkedAt = now.toLocaleTimeString("en-AU", { timeZone: "Australia/Sydney", hour: "numeric", minute: "2-digit", hour12: true });
 
@@ -135,6 +176,8 @@ export default async function DashboardPage() {
     <AppShell activePath="/dashboard" userEmail={user?.email}>
       <PaywallGate userId={user?.id ?? ""} userEmail={user?.email}>
         <div className="space-y-5">
+
+          <LastVisitUpdater now={now.toISOString()} />
 
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -144,19 +187,62 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {/* What changed while you were away */}
+          {lastVisitValid && visitMoves.length > 0 && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-amber-300">What changed while you were away</span>
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400 tracking-wide">
+                    {visitMoves.length} move{visitMoves.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <span className="text-xs text-zinc-600">
+                  since {lastVisit!.toLocaleTimeString("en-AU", { timeZone: "Australia/Sydney", hour: "numeric", minute: "2-digit", hour12: true })} AEST
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {visitMoves.slice(0, 4).map((m, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-300 truncate max-w-52">
+                      {m.outcome} · <span className="text-zinc-500">{m.bookmaker}</span>
+                    </span>
+                    <span className={`shrink-0 font-bold text-xs ${m.pct < 0 ? "text-red-400" : "text-green-400"}`}>
+                      {m.from.toFixed(2)} → {m.to.toFixed(2)} ({m.pct > 0 ? "+" : ""}{m.pct.toFixed(1)}%)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Stat cards */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: "Live matches", value: liveMatches.length, href: "/live", accent: liveMatches.length > 0 ? "text-green-400" : undefined },
-              { label: "Upcoming (7d)", value: upcomingMatches.length, href: "/nrl" },
-              { label: "Active arbs", value: arbs.length, href: "/arbitrage", accent: arbs.length > 0 ? "text-green-400" : undefined },
-              { label: "+EV bets", value: evBets.length, href: "/ev", accent: evBets.length > 0 ? "text-emerald-400" : undefined },
-            ].map(({ label, value, href, accent }) => (
-              <Link key={label} href={href} className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-4 transition hover:border-zinc-700">
-                <div className={`text-2xl font-bold ${accent ?? "text-zinc-100"}`}>{value}</div>
-                <div className="mt-0.5 text-xs text-zinc-500">{label}</div>
-              </Link>
-            ))}
+              { label: "Live matches", value: liveMatches.length,     href: "/live",      hot: liveMatches.length > 0,  color: "green"  as const },
+              { label: "Upcoming (7d)", value: upcomingMatches.length, href: "/nrl",      hot: false,                   color: "zinc"   as const },
+              { label: "Active arbs",  value: arbs.length,            href: "/arbitrage", hot: arbs.length > 0,         color: "amber"  as const },
+              { label: "+EV bets",     value: evBets.length,          href: "/ev",        hot: evBets.length > 0,       color: "amber"  as const },
+            ].map(({ label, value, href, hot, color }) => {
+              const cardCls = hot
+                ? color === "green"
+                  ? "border-green-800/60 bg-green-950/30 hover:border-green-700/60"
+                  : "border-amber-800/60 bg-amber-950/20 hover:border-amber-700/60"
+                : "border-zinc-800 bg-zinc-950/90 hover:border-zinc-700";
+              const numCls = hot
+                ? color === "green" ? "text-green-400" : "text-amber-400"
+                : "text-zinc-100";
+              const dotCls = color === "green" ? "bg-green-500" : "bg-amber-500";
+              return (
+                <Link key={label} href={href} className={`rounded-xl border p-4 transition ${cardCls}`}>
+                  <div className="flex items-start justify-between gap-1">
+                    <div className={`text-2xl font-bold ${numCls}`}>{value}</div>
+                    {hot && <span className={`mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full ${dotCls}`} />}
+                  </div>
+                  <div className="mt-0.5 text-xs text-zinc-500">{label}</div>
+                </Link>
+              );
+            })}
           </div>
 
           {/* Two column layout */}
@@ -178,7 +264,7 @@ export default async function DashboardPage() {
                         <div className="text-sm text-zinc-200">{arb.matchName}</div>
                         <div className="text-xs text-zinc-500">{arb.bookmakers}</div>
                       </div>
-                      <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-400">
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-400">
                         +{arb.roi.toFixed(2)}%
                       </span>
                     </div>
@@ -204,7 +290,7 @@ export default async function DashboardPage() {
                         <div className="text-xs text-zinc-500">{bet.bookmaker} · {bet.matchName}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs font-semibold text-emerald-400">+{bet.ev.toFixed(2)}%</div>
+                        <div className="text-xs font-bold text-amber-400">+{bet.ev.toFixed(2)}%</div>
                         <div className="text-xs text-zinc-500">@ {bet.odds.toFixed(2)}</div>
                       </div>
                     </div>

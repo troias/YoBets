@@ -32,9 +32,9 @@ export default async function LivePage() {
       ],
     },
     include: {
-      odds: { where: { marketType: "h2h" }, orderBy: { bookmaker: "asc" } },
+      odds: { where: { marketType: "h2h", bookmaker: { notIn: ["bet365"] } }, orderBy: { bookmaker: "asc" } },
       snapshots: {
-        where: { marketType: "h2h", recordedAt: { gte: new Date(now.getTime() - 3_600_000) } },
+        where: { marketType: "h2h", bookmaker: { notIn: ["bet365"] }, recordedAt: { gte: new Date(now.getTime() - 3_600_000) } },
         orderBy: { recordedAt: "desc" },
         take: 50,
       },
@@ -75,9 +75,10 @@ export default async function LivePage() {
                 const matchSnaps = match.snapshots as unknown as SnapRow[];
                 const bookmakers = [...new Set(matchOdds.map(o => o.bookmaker))];
                 const outcomes = ["home", "away"] as const;
+                const STALE = new Set(["bet365"]);
                 const bestByOutcome: Record<string, number> = {};
                 for (const oc of outcomes) {
-                  const rows = matchOdds.filter(o => o.outcome === oc);
+                  const rows = matchOdds.filter(o => o.outcome === oc && !STALE.has(o.bookmaker));
                   bestByOutcome[oc] = rows.length ? Math.max(...rows.map(o => Number(o.price))) : 0;
                 }
 
@@ -151,12 +152,12 @@ export default async function LivePage() {
                                       <td key={bm} className="px-3 py-2.5 text-center">
                                         {price !== null ? (
                                           <div className="flex flex-col items-center gap-0.5">
-                                            <a href={odd!.deepLinkUrl} target="_blank" rel="noopener noreferrer"
-                                              className={isBest ? "font-semibold text-green-400 hover:text-green-300" : "text-zinc-300 hover:text-zinc-100"}>
+                                            <a href={`/api/bet?bm=${bm}`} target="_blank" rel="noopener noreferrer"
+                                              className={isBest ? "font-bold text-amber-400 hover:text-amber-300" : "text-zinc-300 hover:text-white"}>
                                               {price.toFixed(2)}
                                             </a>
                                             {move && (
-                                              <span className={`text-[10px] ${move.pct < 0 ? "text-red-400" : "text-amber-400"}`}>
+                                              <span className={`text-[10px] font-bold ${move.pct < 0 ? "text-red-400" : "text-green-400"}`}>
                                                 {move.pct > 0 ? "▲" : "▼"}{Math.abs(move.pct).toFixed(1)}%
                                               </span>
                                             )}

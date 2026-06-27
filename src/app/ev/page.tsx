@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { MarketTabs, type MarketType } from "@/components/ui/market-tabs";
 import { PaywallGate } from "@/components/paywall-gate";
+import { BankrollInput } from "@/components/bankroll-input";
 
 const BOOKMAKER_LABEL: Record<string, string> = {
   sportsbet: "Sportsbet",
@@ -187,6 +188,8 @@ export default async function EVPage({
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
 
+  const bankroll = Math.max(0, Number(cookieStore.get("bankroll")?.value ?? 0));
+
   const now = new Date();
   const { gte, lte } = aestDateRange(date, now);
 
@@ -267,7 +270,39 @@ export default async function EVPage({
               );
             })}
           </div>
+          <BankrollInput initialValue={bankroll} />
         </div>
+
+        {/* Kelly explainer */}
+        <details className="group rounded-xl border border-zinc-800 bg-zinc-950/90">
+          <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs text-zinc-500 hover:text-zinc-300 list-none">
+            <span>What is ¼ Kelly and how much should I stake?</span>
+            <span className="group-open:rotate-180 transition-transform">▾</span>
+          </summary>
+          <div className="border-t border-zinc-800 px-4 py-4 space-y-3 text-xs text-zinc-400 leading-relaxed">
+            <p>
+              <span className="font-semibold text-zinc-200">Kelly Criterion</span> is a formula that tells you the mathematically optimal fraction of your bankroll to wager on a +EV bet. The full Kelly bet is aggressive and causes wild swings, so sharp bettors use{" "}
+              <span className="font-semibold text-zinc-200">Quarter Kelly (¼ Kelly)</span> — exactly 25% of the Kelly recommendation. It still grows your bankroll efficiently while protecting against bad runs.
+            </p>
+            <div className="rounded-lg bg-zinc-900 px-3 py-3 space-y-1.5">
+              <p className="text-zinc-300 font-medium">Formula</p>
+              <p className="font-mono text-zinc-400">Kelly % = (fair_prob × (odds − 1) − (1 − fair_prob)) ÷ (odds − 1)</p>
+              <p className="font-mono text-zinc-400">¼ Kelly stake = bankroll × (Kelly % × 0.25)</p>
+            </div>
+            <div className="rounded-lg bg-zinc-900 px-3 py-3 space-y-1.5">
+              <p className="text-zinc-300 font-medium">Example</p>
+              <p>Odds: 2.10 · Fair probability: 52% · Bankroll: $1,000</p>
+              <p>Kelly % = (0.52 × 1.10 − 0.48) ÷ 1.10 ≈ <span className="text-white font-semibold">4.0%</span></p>
+              <p>¼ Kelly stake = $1,000 × (4.0% × 0.25) = <span className="text-amber-400 font-semibold">$10.00</span></p>
+            </div>
+            <p className="text-zinc-600">
+              Rule of thumb: never stake more than 2–5% of your bankroll on a single bet, no matter what the formula says. The dots below show bet strength — 5 dots = near the 2% cap.
+              {bankroll > 0
+                ? ` Your bankroll is set to $${bankroll.toLocaleString()} — dollar amounts are shown in the ¼ Kelly column.`
+                : " Enter your bankroll in the filter bar above to see recommended dollar amounts."}
+            </p>
+          </div>
+        </details>
 
         <p className="text-xs text-zinc-600">
           Boosted/promo prices and Bet365 (stale scraped data) are excluded from the fair odds model.
@@ -284,16 +319,18 @@ export default async function EVPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/90">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-145 text-sm">
               <thead>
                 <tr className="border-b border-zinc-800">
                   <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Match</th>
                   <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Outcome</th>
                   <th className="px-4 py-2.5 text-left text-xs font-normal text-zinc-500">Book</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Offered</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Fair</th>
+                  <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">Price vs Fair</th>
                   <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">EV</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">¼ Kelly</th>
+                  <th className="px-4 py-2.5 text-center text-xs font-normal text-zinc-500">
+                    ¼ Kelly{bankroll > 0 ? ` (of $${bankroll.toLocaleString()})` : ""}
+                  </th>
                   <th className="px-4 py-2.5 text-xs font-normal text-zinc-500 sr-only">Bet</th>
                 </tr>
               </thead>
@@ -318,36 +355,50 @@ export default async function EVPage({
                       <td className="px-4 py-3 text-zinc-400 whitespace-nowrap">
                         {BOOKMAKER_LABEL[row.bookmaker] ?? row.bookmaker}
                       </td>
-                      <td className="px-4 py-3 text-center font-medium text-zinc-100">
-                        {row.offeredOdds.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-center text-zinc-500">
-                        {row.fairOdds.toFixed(2)}
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="font-bold text-white">{row.offeredOdds.toFixed(2)}</span>
+                          <span className="text-[10px] text-zinc-600">fair: {row.fairOdds.toFixed(2)}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span
-                          className={`font-semibold ${
-                            row.evPercent >= 3
+                          className={`font-bold ${
+                            row.evPercent >= 5
+                              ? "text-amber-400"
+                              : row.evPercent >= 2
                               ? "text-green-400"
-                              : row.evPercent >= 1
-                              ? "text-emerald-500"
-                              : "text-zinc-300"
+                              : "text-emerald-600"
                           }`}
                         >
                           +{row.evPercent.toFixed(2)}%
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-xs text-zinc-400">
-                          {row.kellyPct.toFixed(1)}%
-                        </span>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, j) => {
+                              const filled = j < Math.min(5, Math.round(row.kellyPct / 4));
+                              return (
+                                <span key={j} className={`h-1.5 w-1.5 rounded-full ${filled ? "bg-green-500" : "bg-zinc-800"}`} />
+                              );
+                            })}
+                          </div>
+                          {bankroll > 0 ? (
+                            <span className="text-xs font-semibold text-amber-400">
+                              ${(bankroll * row.kellyPct / 100).toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-zinc-600">{row.kellyPct.toFixed(1)}%</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <a
-                          href={row.deepLinkUrl}
+                          href={`/api/bet?bm=${row.bookmaker}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-700 hover:text-zinc-100"
+                          className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition hover:bg-amber-500/20 hover:text-amber-300"
                         >
                           Bet →
                         </a>
@@ -357,6 +408,7 @@ export default async function EVPage({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
