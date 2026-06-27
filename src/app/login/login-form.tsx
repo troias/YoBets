@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /FBAN|FBAV|FB_IAB|FBIOS|Instagram|BytedanceWebview|musical_ly|Twitter|LinkedInApp|Line\/|MicroMessenger/i.test(ua);
+}
 
 export default function LoginPage() {
   const supabase = createClient();
@@ -14,6 +20,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [inAppBrowser, setInAppBrowser] = useState(false);
+
+  useEffect(() => {
+    setInAppBrowser(isInAppBrowser());
+  }, []);
 
   function redirectTarget() {
     const params = new URLSearchParams(window.location.search);
@@ -53,14 +64,21 @@ export default function LoginPage() {
         <p className="text-sm text-zinc-400">NRL odds comparison across 11 Australian bookmakers</p>
       </div>
 
-      <Button
-        onClick={signInWithGoogle}
-        variant="secondary"
-        className="flex h-11 items-center gap-3"
-      >
-        <GoogleIcon />
-        Continue with Google
-      </Button>
+      {inAppBrowser ? (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+          <p className="font-medium mb-1">Open in Safari or Chrome to sign in with Google</p>
+          <p className="text-amber-300/70 text-xs">Google blocks sign-in from in-app browsers (Messenger, Instagram, etc.). Tap the menu and choose &quot;Open in Browser&quot;, or copy the link and paste it into Safari.</p>
+        </div>
+      ) : (
+        <Button
+          onClick={signInWithGoogle}
+          variant="secondary"
+          className="flex h-11 items-center gap-3"
+        >
+          <GoogleIcon />
+          Continue with Google
+        </Button>
+      )}
 
       <div className="flex items-center gap-3">
         <div className="h-px flex-1 bg-zinc-800" />
