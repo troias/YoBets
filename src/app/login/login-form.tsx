@@ -41,6 +41,16 @@ export default function LoginPage() {
     });
   }
 
+  async function signInWithFacebook() {
+    const dest = redirectTarget();
+    await supabase.auth.signInWithOAuth({
+      provider: "facebook",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(dest)}`,
+      },
+    });
+  }
+
   function signInWithEmail() {
     setError("");
     startTransition(async () => {
@@ -64,10 +74,19 @@ export default function LoginPage() {
         <p className="text-sm text-zinc-400">NRL odds comparison across 11 Australian bookmakers</p>
       </div>
 
+      <Button
+        onClick={signInWithFacebook}
+        variant="secondary"
+        className="flex h-11 items-center gap-3 bg-[#1877F2] hover:bg-[#166fe5] text-white border-0"
+      >
+        <FacebookIcon />
+        Continue with Facebook
+      </Button>
+
       {inAppBrowser ? (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
           <p className="font-medium mb-1">Open in Safari or Chrome to sign in with Google</p>
-          <p className="text-amber-300/70 text-xs">Google blocks sign-in from in-app browsers (Messenger, Instagram, etc.). Tap the menu and choose &quot;Open in Browser&quot;, or copy the link and paste it into Safari.</p>
+          <p className="text-amber-300/70 text-xs">Google blocks sign-in from in-app browsers. Tap the menu and choose &quot;Open in Browser&quot;, or paste the link into Safari.</p>
         </div>
       ) : (
         <Button
@@ -116,6 +135,14 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+function FacebookIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
   );
 }
 
