@@ -9,7 +9,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig, setWorkerMode } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
 import { RefreshOddsButton } from "@/components/refresh-odds-button";
-import { SocialPostBox } from "@/components/social-post-box";
+import { TwitterPostSection } from "@/components/twitter-post-section";
+import { InstagramPostSection } from "@/components/instagram-post-section";
 import { RedditPostBox } from "@/components/reddit-post-box";
 
 const SERVICES = [
@@ -27,15 +28,19 @@ const SERVICES = [
     { label: "Monthly Price ID", key: "STRIPE_PRICE_MONTHLY" },
   ]},
   { group: "Discord", entries: [{ label: "Webhook URL", key: "DISCORD_WEBHOOK_URL" }] },
+  { group: "AI (Groq — free)", entries: [
+    { label: "Groq API Key", key: "GROQ_API_KEY" },
+  ]},
   { group: "Twitter / X", entries: [
     { label: "API Key",        key: "TWITTER_API_KEY" },
     { label: "API Secret",     key: "TWITTER_API_SECRET" },
     { label: "Access Token",   key: "TWITTER_ACCESS_TOKEN" },
     { label: "Access Secret",  key: "TWITTER_ACCESS_SECRET" },
   ]},
-  { group: "Facebook", entries: [
-    { label: "Page ID",          key: "FACEBOOK_PAGE_ID" },
-    { label: "Page Access Token", key: "FACEBOOK_PAGE_ACCESS_TOKEN" },
+  { group: "Facebook / Instagram", entries: [
+    { label: "Page ID",            key: "FACEBOOK_PAGE_ID" },
+    { label: "Page Access Token",  key: "FACEBOOK_PAGE_ACCESS_TOKEN" },
+    { label: "Instagram Account ID", key: "INSTAGRAM_ACCOUNT_ID" },
   ]},
 ] as const;
 
@@ -114,6 +119,11 @@ export default async function AdminPage() {
   );
   const hasFacebook = !!(
     (configMap.get("FACEBOOK_PAGE_ID")?.value || process.env.FACEBOOK_PAGE_ID) &&
+    (configMap.get("FACEBOOK_PAGE_ACCESS_TOKEN")?.value || process.env.FACEBOOK_PAGE_ACCESS_TOKEN)
+  );
+  const hasGroq = !!(configMap.get("GROQ_API_KEY")?.value || process.env.GROQ_API_KEY);
+  const hasInstagram = !!(
+    (configMap.get("INSTAGRAM_ACCOUNT_ID")?.value || process.env.INSTAGRAM_ACCOUNT_ID) &&
     (configMap.get("FACEBOOK_PAGE_ACCESS_TOKEN")?.value || process.env.FACEBOOK_PAGE_ACCESS_TOKEN)
   );
   const hasReddit = !!(
@@ -398,14 +408,11 @@ export default async function AdminPage() {
           </div>
         </div>
 
-        {/* Social posting */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-4">
-          <div>
-            <h2 className="text-sm font-medium text-zinc-300">Post to X / Twitter</h2>
-            <p className="mt-0.5 text-xs text-zinc-500">Compose and post directly to @EdgeBoard. Templates included.</p>
-          </div>
-          <SocialPostBox hasTwitter={hasTwitter} hasFacebook={hasFacebook} />
-        </div>
+        {/* Twitter + Facebook posting */}
+        <TwitterPostSection hasTwitter={hasTwitter} hasFacebook={hasFacebook} hasGroq={hasGroq} />
+
+        {/* Instagram posting */}
+        <InstagramPostSection hasInstagram={hasInstagram} hasGroq={hasGroq} />
 
         {/* Reddit posting */}
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-4">
