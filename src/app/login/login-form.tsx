@@ -46,6 +46,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: "facebook",
       options: {
+        scopes: "email,public_profile",
         redirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(dest)}`,
       },
     });

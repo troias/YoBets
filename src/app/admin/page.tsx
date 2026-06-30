@@ -9,6 +9,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { createApiKey, deleteApiKey, upsertAppConfig, deleteAppConfig, setWorkerMode } from "@/app/actions/api-keys";
 import { ConfigValue } from "@/components/config-value";
 import { RefreshOddsButton } from "@/components/refresh-odds-button";
+import { SocialPostBox } from "@/components/social-post-box";
+import { RedditPostBox } from "@/components/reddit-post-box";
 
 const SERVICES = [
   { group: "The Odds API", entries: [{ label: "The Odds API Key", key: "THE_ODDS_API_KEY" }] },
@@ -25,6 +27,16 @@ const SERVICES = [
     { label: "Monthly Price ID", key: "STRIPE_PRICE_MONTHLY" },
   ]},
   { group: "Discord", entries: [{ label: "Webhook URL", key: "DISCORD_WEBHOOK_URL" }] },
+  { group: "Twitter / X", entries: [
+    { label: "API Key",        key: "TWITTER_API_KEY" },
+    { label: "API Secret",     key: "TWITTER_API_SECRET" },
+    { label: "Access Token",   key: "TWITTER_ACCESS_TOKEN" },
+    { label: "Access Secret",  key: "TWITTER_ACCESS_SECRET" },
+  ]},
+  { group: "Facebook", entries: [
+    { label: "Page ID",          key: "FACEBOOK_PAGE_ID" },
+    { label: "Page Access Token", key: "FACEBOOK_PAGE_ACCESS_TOKEN" },
+  ]},
 ] as const;
 
 const KNOWN_KEYS = new Set<string>(SERVICES.flatMap((s) => s.entries.map((e) => e.key as string)));
@@ -94,6 +106,22 @@ export default async function AdminPage() {
   }));
   const stripeAllSet = stripeStatus.every(s => s.set);
   const workerMode = (configMap.get("worker_mode")?.value ?? "production") as "production" | "slow" | "off";
+  const hasTwitter = !!(
+    (configMap.get("TWITTER_API_KEY")?.value || process.env.TWITTER_API_KEY) &&
+    (configMap.get("TWITTER_API_SECRET")?.value || process.env.TWITTER_API_SECRET) &&
+    (configMap.get("TWITTER_ACCESS_TOKEN")?.value || process.env.TWITTER_ACCESS_TOKEN) &&
+    (configMap.get("TWITTER_ACCESS_SECRET")?.value || process.env.TWITTER_ACCESS_SECRET)
+  );
+  const hasFacebook = !!(
+    (configMap.get("FACEBOOK_PAGE_ID")?.value || process.env.FACEBOOK_PAGE_ID) &&
+    (configMap.get("FACEBOOK_PAGE_ACCESS_TOKEN")?.value || process.env.FACEBOOK_PAGE_ACCESS_TOKEN)
+  );
+  const hasReddit = !!(
+    process.env.REDDIT_CLIENT_ID &&
+    process.env.REDDIT_CLIENT_SECRET &&
+    process.env.REDDIT_USERNAME &&
+    process.env.REDDIT_PASSWORD
+  );
 
   const statCards = [
     { label: "Active",        value: active },
@@ -368,6 +396,24 @@ export default async function AdminPage() {
               </button>
             </form>
           </div>
+        </div>
+
+        {/* Social posting */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-4">
+          <div>
+            <h2 className="text-sm font-medium text-zinc-300">Post to X / Twitter</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">Compose and post directly to @EdgeBoard. Templates included.</p>
+          </div>
+          <SocialPostBox hasTwitter={hasTwitter} hasFacebook={hasFacebook} />
+        </div>
+
+        {/* Reddit posting */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/90 p-5 space-y-4">
+          <div>
+            <h2 className="text-sm font-medium text-zinc-300">Post to Reddit</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">Pre-written posts for r/sportsbetting, r/NRL, r/ausfinance. Select subreddit, edit if needed, post.</p>
+          </div>
+          <RedditPostBox hasReddit={hasReddit} />
         </div>
 
         {/* API Keys */}

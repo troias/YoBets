@@ -123,10 +123,17 @@ export function AppShell({
         {/* Main content — extra bottom padding on mobile so content isn't hidden by tab bar */}
         <main className="pb-24 md:pb-4">
           {children}
-          <p className="mt-8 text-[11px] text-zinc-700 leading-relaxed">
-            EdgeBoard earns a commission when you sign up or deposit at a bookmaker via our links. This does not affect the odds we display — all prices are fetched directly from each bookmaker. Gamble responsibly.{" "}
-            <a href="https://www.gamblinghelponline.org.au" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-500 transition">Gambling Help Online 1800 858 858</a>.
-          </p>
+          <div className="mt-8 space-y-1.5">
+            <p className="text-[11px] text-zinc-700 leading-relaxed">
+              EdgeBoard earns a commission when you sign up or deposit at a bookmaker via our links. This does not affect the odds we display — all prices are fetched directly from each bookmaker. Gamble responsibly.{" "}
+              <a href="https://www.gamblinghelponline.org.au" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-500 transition">Gambling Help Online 1800 858 858</a>.
+            </p>
+            <p className="text-[11px] text-zinc-700">
+              <Link href="/terms" className="underline hover:text-zinc-500 transition">Terms of Service</Link>
+              {" · "}
+              <Link href="/privacy" className="underline hover:text-zinc-500 transition">Privacy Policy</Link>
+            </p>
+          </div>
         </main>
       </div>
 
